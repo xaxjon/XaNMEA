@@ -257,7 +257,7 @@ function page_footer(): void
 {
     echo '</main>';
     echo '<footer class="page-footer">&copy; ' . date('Y') .
-        ' <a href="https://www.xaxero.com" target="_blank" rel="noopener">Xaxero Software Engineering</a></footer>';
+        ' <a href="https://www.xaxero.com" target="_blank" rel="noopener">Xaxero Marine Software Engineering</a></footer>';
     echo '<script>';
     // Shared: daemon-reachability banner, CSRF helper for fetch().
     echo <<<'JS'

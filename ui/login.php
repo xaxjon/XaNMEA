@@ -119,6 +119,6 @@ header('Content-Type: text/html; charset=utf-8');
     </form>
   <?php endif; ?>
 </div>
-<footer class="page-footer">&copy; <?= date('Y') ?> <a href="https://www.xaxero.com" target="_blank" rel="noopener">Xaxero Software Engineering</a></footer>
+<footer class="page-footer">&copy; <?= date('Y') ?> <a href="https://www.xaxero.com" target="_blank" rel="noopener">Xaxero Marine Software Engineering</a></footer>
 </body>
 </html>

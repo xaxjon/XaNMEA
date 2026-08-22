@@ -10,8 +10,8 @@ namespace XaNmea;
  */
 final class Sentence
 {
-    public string $raw;          // original line without CRLF
-    public ?string $tagBlock;    // raw TAG block text between \ \ or null
+    public string $raw;          // original line without CRLF and without any TAG block
+    public ?string $tagBlock;    // raw TAG block text between \ \ or null (kept for diagnostics)
     public string $body;         // sentence text between $/! and * (or end)
     public string $talker;       // 2 chars (GP, AI, ...)
     public string $type;         // 3 chars (GGA, VDM, ...)
@@ -43,7 +43,8 @@ final class Sentence
         $s->ts = microtime(true);
         $s->tagBlock = null;
 
-        // Optional TAG block: \....\*hh\ prefix
+        // Optional TAG block: \....\*hh\ prefix. Parsed for diagnostics but
+        // stripped from raw so outputs carry the bare NMEA sentence only.
         $rest = $line;
         if ($rest[0] === '\\') {
             $end = strpos($rest, '\\', 1);
@@ -55,6 +56,7 @@ final class Sentence
             if ($rest === '') {
                 return null;
             }
+            $s->raw = $rest;
         }
 
         if ($rest[0] !== '$' && $rest[0] !== '!') {

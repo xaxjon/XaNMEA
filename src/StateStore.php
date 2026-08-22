@@ -182,7 +182,8 @@ final class StateStore
                 $changed[$mmsi] = ['stale' => $stale];
             }
             if (!$stale && isset($t['lat'])) {
-                $this->deriveAis($mmsi); // keep CPA fresh as ownship moves
+                // PHP casts numeric-string array keys to int; deriveAis needs string
+                $this->deriveAis((string)$mmsi); // keep CPA fresh as ownship moves
             }
         }
         if ($changed) {

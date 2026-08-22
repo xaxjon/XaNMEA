@@ -32,7 +32,6 @@
       "direction": "out",
       "address": "0.0.0.0",
       "port": 10110,
-      "srctag": "input",
       "comment": "main TCP server - connect OpenCPN/iNavX here"
     },
     {

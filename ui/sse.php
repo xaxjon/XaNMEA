@@ -16,6 +16,12 @@ require __DIR__ . '/lib/common.php';
 
 requireLogin(null, true);
 
+// Release the session lock BEFORE streaming: the default file handler
+// holds an exclusive lock for the whole request, which would block every
+// other same-session page/API call (ping, stats, navigation) for as long
+// as this stream lives.
+session_write_close();
+
 $stream = (string)($_GET['stream'] ?? '');
 if ($stream === 'tail') {
     $iface = trim((string)($_GET['iface'] ?? 'all'));

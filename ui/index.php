@@ -88,6 +88,7 @@ page_header('Status', 'status');
     return html;
   }
 
+  var statsFails = 0;
   async function refresh() {
     var j;
     try {
@@ -95,10 +96,15 @@ page_header('Status', 'status');
       j = await r.json();
     } catch (e) { return; }
     if (!j.ok) {
-      document.getElementById('cards').innerHTML =
-        '<div class="card"><span class="dot red"></span> Daemon unreachable: ' + esc(j.error || '') + '</div>';
+      // transient failure (page swap, busy daemon): keep the current
+      // cards; only show the error after two consecutive failures
+      if (++statsFails >= 2) {
+        document.getElementById('cards').innerHTML =
+          '<div class="card"><span class="dot red"></span> Daemon unreachable: ' + esc(j.error || '') + '</div>';
+      }
       return;
     }
+    statsFails = 0;
     document.getElementById('g-ver').textContent = j.version || '--';
     document.getElementById('g-up').textContent = fmtUptime(j.uptime);
     document.getElementById('g-in').textContent = (j.rates && j.rates.in_1s !== undefined) ? j.rates.in_1s.toFixed(1) : '--';

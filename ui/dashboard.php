@@ -128,6 +128,11 @@ page_header('Dashboard', 'dashboard');
   }
 
   // ---------------- satellite sky plot ----------------
+  // Accumulate sats across GSV sentences: the daemon only carries the
+  // latest sentence's 1-4 sats, so plotting state.misc directly flickers.
+  // A sat is dropped if it has not re-appeared within SAT_TTL_MS.
+  var satCache = {};
+  var SAT_TTL_MS = 120000; // 2 minutes
   function drawSky() {
     var canvas = document.getElementById('g-sky');
     var g = Gauges.fit(canvas);
@@ -150,12 +155,23 @@ page_header('Dashboard', 'dashboard');
     ctx.fillText('E', cx + r + 8, cy + 4);
     ctx.fillText('W', cx - r - 8, cy + 4);
 
-    // gather sats from every misc GSV key
-    var sats = [];
+    // merge the latest GSV sentences into the cache, then plot everything
+    // that has been seen within the TTL
+    var now = Date.now();
     Object.keys(state.misc || {}).forEach(function (k) {
       if (k.indexOf('GSV') < 0) return;
       var f = state.misc[k] && state.misc[k].fields;
-      if (f && Array.isArray(f.sats)) sats = sats.concat(f.sats);
+      if (!f || !Array.isArray(f.sats)) return;
+      f.sats.forEach(function (s) {
+        if (s.prn === undefined || s.prn === null || s.prn === '') return;
+        satCache[String(s.prn)] =
+          {prn: s.prn, elev: s.elev, azim: s.azim, snr: s.snr, ts: now};
+      });
+    });
+    var sats = [];
+    Object.keys(satCache).forEach(function (p) {
+      if (now - satCache[p].ts > SAT_TTL_MS) { delete satCache[p]; return; }
+      sats.push(satCache[p]);
     });
     var n = 0;
     sats.forEach(function (s) {

@@ -268,6 +268,7 @@ function page_footer(): void
     });
     return r.json();
   };
+  var daemonFails = 0;
   async function banner() {
     const el = document.getElementById('daemon-banner');
     if (!el) return;
@@ -275,17 +276,24 @@ function page_footer(): void
       const r = await fetch('api.php?action=ping');
       const j = await r.json();
       if (j.ok) {
+        daemonFails = 0;
         el.innerHTML = '';
         if (j.heartbeat && j.heartbeat.stale) {
           el.innerHTML = '<div class="banner warn">Daemon heartbeat is stale (' +
             Math.round(j.heartbeat.age) + 's old) - daemon may be wedged</div>';
         }
       } else {
-        el.innerHTML = '<div class="banner err">Daemon unreachable: ' +
-          (j.error || 'no reply') + '</div>';
+        // tolerate transient failures (page swap, busy daemon): only show
+        // the banner after two consecutive failed pings
+        if (++daemonFails >= 2) {
+          el.innerHTML = '<div class="banner err">Daemon unreachable: ' +
+            (j.error || 'no reply') + '</div>';
+        }
       }
     } catch (e) {
-      el.innerHTML = '<div class="banner err">Daemon unreachable</div>';
+      if (++daemonFails >= 2) {
+        el.innerHTML = '<div class="banner err">Daemon unreachable</div>';
+      }
     }
   }
   banner();

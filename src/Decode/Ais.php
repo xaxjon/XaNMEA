@@ -216,15 +216,15 @@ final class Ais
                 if (strlen($bits) < 168) {
                     return null;
                 }
-                $lon = self::sint($bits, 57, 28);
-                $lat = self::sint($bits, 85, 27);
+                $lon = self::sint($bits, 51, 28);
+                $lat = self::sint($bits, 79, 27);
                 $msg = [
                     'message_id' => 18,
                     'mmsi' => $mmsi,
                     'class' => 'B',
-                    'sog' => self::uint($bits, 46, 10) / 10.0,
-                    'cog' => self::uint($bits, 112, 12) / 10.0,
-                    'hdg' => ($h = self::uint($bits, 124, 9)) === 511 ? null : $h,
+                    'sog' => self::uint($bits, 40, 10) / 10.0,
+                    'cog' => self::uint($bits, 106, 12) / 10.0,
+                    'hdg' => ($h = self::uint($bits, 118, 9)) === 511 ? null : $h,
                 ];
                 if ($lon !== 0x6791AC0 && $lat !== 0x3412140) {
                     $msg['lon'] = $lon / 600000.0;
@@ -236,15 +236,15 @@ final class Ais
                 if (strlen($bits) < 312) {
                     return null;
                 }
-                $lon = self::sint($bits, 61, 28);
-                $lat = self::sint($bits, 89, 27);
+                $lon = self::sint($bits, 53, 28);
+                $lat = self::sint($bits, 81, 27);
                 $msg = [
                     'message_id' => 19,
                     'mmsi' => $mmsi,
                     'class' => 'B',
-                    'sog' => self::uint($bits, 46, 10) / 10.0,
-                    'cog' => self::uint($bits, 112, 12) / 10.0,
-                    'name' => self::str6($bits, 143, 20),
+                    'sog' => self::uint($bits, 42, 10) / 10.0,
+                    'cog' => self::uint($bits, 108, 12) / 10.0,
+                    'name' => self::str6($bits, 139, 20),
                 ];
                 if ($lon !== 0x6791AC0 && $lat !== 0x3412140) {
                     $msg['lon'] = $lon / 600000.0;
@@ -256,15 +256,22 @@ final class Ais
                 if (strlen($bits) < 272) {
                     return null;
                 }
-                $lon = self::sint($bits, 61, 28);
-                $lat = self::sint($bits, 89, 27);
-                $nameLen = (strlen($bits) >= 272 + 88) ? 20 + self::uint($bits, 270, 2) : 20;
+                $lon = self::sint($bits, 164, 28);
+                $lat = self::sint($bits, 192, 27);
+                // Name extension (up to 14 chars) starts at bit 272; its
+                // length is implied by the message length, not by a field.
+                // It is NOT contiguous with the 20-char name field.
+                $ext = (int)min(14, max(0, (strlen($bits) - 272) / 6));
+                $name = self::str6($bits, 43, 20);
+                if ($ext > 0) {
+                    $name = rtrim($name, '@') . self::str6($bits, 272, $ext);
+                }
                 $msg = [
                     'message_id' => 21,
                     'mmsi' => $mmsi,
                     'class' => 'AtoN',
                     'aton_type' => self::uint($bits, 38, 5),
-                    'name' => self::str6($bits, 43, min(20 + $nameLen, 34)),
+                    'name' => $name,
                 ];
                 if ($lon !== 0x6791AC0 && $lat !== 0x3412140) {
                     $msg['lon'] = $lon / 600000.0;
@@ -304,14 +311,14 @@ final class Ais
                 if (strlen($bits) < 96) {
                     return null;
                 }
-                $lon = self::sint($bits, 44, 18);
-                $lat = self::sint($bits, 62, 17);
+                $lon = self::sint($bits, 45, 18);
+                $lat = self::sint($bits, 63, 17);
                 $msg = [
                     'message_id' => 27,
                     'mmsi' => $mmsi,
                     'class' => 'A',
-                    'sog' => (float)self::uint($bits, 79, 6),
-                    'cog' => (float)self::uint($bits, 85, 9),
+                    'sog' => (float)self::uint($bits, 80, 6),
+                    'cog' => (float)self::uint($bits, 86, 9),
                 ];
                 if ($lon !== 0x1A838 || $lat !== 0xD548) {
                     $msg['lon'] = $lon / 600.0;

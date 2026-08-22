@@ -38,6 +38,7 @@ else
   echo "==> keeping existing /etc/xanmea/config.json"
 fi
 chown -R xanmea:xanmea /etc/xanmea /var/lib/xanmea /run/xanmea
+chmod 0775 /etc/xanmea   # group (www-data) must create config.json.tmp.* on save
 chmod 0660 /etc/xanmea/config.json
 
 # --- web UI

@@ -369,6 +369,13 @@ final class Daemon
                 }
                 return ['ok' => false, 'error' => 'unknown interface or client'];
 
+            case 'CLEAR':
+                if (strtoupper($parts[1] ?? '') === 'AIS') {
+                    $n = $this->state->clearAis();
+                    return ['ok' => true, 'note' => "cleared $n AIS targets"];
+                }
+                return ['ok' => false, 'error' => 'usage: CLEAR ais'];
+
             default:
                 return ['ok' => false, 'error' => "unknown command '$cmd'"];
         }

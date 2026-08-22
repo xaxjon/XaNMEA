@@ -84,6 +84,21 @@ final class StateStore
         $this->emit(['ais' => [$mmsi => $fields]]);
     }
 
+    /** Drop all AIS targets; emits removal deltas. Returns the count cleared. */
+    public function clearAis(): int
+    {
+        $changed = [];
+        foreach ($this->ais as $mmsi => $_) {
+            $changed[$mmsi] = null; // null = removed
+        }
+        $n = count($this->ais);
+        $this->ais = [];
+        if ($changed) {
+            $this->emit(['ais' => $changed]);
+        }
+        return $n;
+    }
+
     /** Recompute distance/bearing/CPA/TCPA against ownship. */
     private function deriveAis(string $mmsi): void
     {

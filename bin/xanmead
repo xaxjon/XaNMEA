@@ -1,0 +1,61 @@
+#!/usr/bin/env php
+<?php
+/**
+ * xanmead - XaNMEA multiplexer daemon entry point.
+ *
+ * Usage: xanmead [-c /path/to/config.json] [-d]
+ *   -c  config file path (default: /etc/xanmea/config.json, then ./config/config.json)
+ *   -d  debug: log to stderr as well, stay verbose
+ */
+declare(strict_types=1);
+
+error_reporting(E_ALL);
+ini_set('display_errors', 'stderr');
+ini_set('log_errors', '0');
+set_time_limit(0);
+umask(0022);
+
+// Locate src/: next to a dev checkout (bin/../src) or the installed lib dir.
+$srcDirs = [__DIR__ . '/../src', '/usr/local/lib/xanmea/src'];
+spl_autoload_register(function (string $class) use ($srcDirs): void {
+    if (str_starts_with($class, 'XaNmea\\')) {
+        $rel = str_replace('\\', '/', substr($class, 8)) . '.php';
+        foreach ($srcDirs as $dir) {
+            $file = $dir . '/' . $rel;
+            if (is_file($file)) {
+                require $file;
+                return;
+            }
+        }
+    }
+});
+
+use XaNmea\Daemon;
+
+$opts = getopt('c:d');
+$configPath = null;
+if (isset($opts['c']) && is_string($opts['c'])) {
+    $configPath = $opts['c'];
+} else {
+    foreach (['/etc/xanmea/config.json', __DIR__ . '/../config/config.json'] as $candidate) {
+        if (is_file($candidate)) {
+            $configPath = $candidate;
+            break;
+        }
+    }
+}
+if ($configPath === null) {
+    fwrite(STDERR, "xanmead: no config file found (use -c <path>)\n");
+    exit(1);
+}
+
+$debug = isset($opts['d']);
+
+try {
+    $daemon = new Daemon($configPath, $debug);
+    $daemon->run();
+    exit(0);
+} catch (Throwable $e) {
+    fwrite(STDERR, 'xanmead: fatal: ' . $e->getMessage() . "\n");
+    exit(1);
+}

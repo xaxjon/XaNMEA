@@ -1,0 +1,32 @@
+[Unit]
+Description=XaNMEA multiplexer daemon (xanmead)
+After=network.target
+Documentation=README.md
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/xanmead -c /etc/xanmea/config.json
+Restart=always
+RestartSec=3
+# Watchdog: daemon sends WATCHDOG=1 keepalives; systemd restarts it if
+# the main loop wedges for longer than this.
+WatchdogSec=15
+
+# Privilege model: unprivileged user, dialout group for serial devices.
+User=xanmea
+Group=xanmea
+SupplementaryGroups=dialout
+
+# Runtime directory for control socket + heartbeat
+RuntimeDirectory=xanmea
+RuntimeDirectoryMode=0775
+
+# Hardening (daemon needs: serial devices, TCP/UDP sockets, unix socket)
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/run/xanmea /var/lib/xanmea
+
+[Install]
+WantedBy=multi-user.target

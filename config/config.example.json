@@ -1,0 +1,64 @@
+{
+  "daemon": {
+    "control_socket": "/run/xanmea/control.sock",
+    "heartbeat_file": "/run/xanmea/heartbeat.json",
+    "checksum": true,
+    "strict": false,
+    "qsize": 200,
+    "log_level": "info",
+    "syslog": true,
+    "ais_max_targets": 500,
+    "ais_stale_sec": 60,
+    "ais_drop_sec": 600,
+    "stream_qsize": 500
+  },
+  "interfaces": [
+    {
+      "name": "sim",
+      "enabled": true,
+      "type": "tcp_client",
+      "direction": "in",
+      "address": "127.0.0.1",
+      "port": 4010,
+      "persist": true,
+      "retry": 5,
+      "keepalive": true,
+      "comment": "input from tools/simulator.php - replace with real serial/TCP inputs"
+    },
+    {
+      "name": "nav-tcp",
+      "enabled": true,
+      "type": "tcp_server",
+      "direction": "out",
+      "address": "0.0.0.0",
+      "port": 10110,
+      "srctag": "input",
+      "comment": "main TCP server - connect OpenCPN/iNavX here"
+    },
+    {
+      "name": "udp-bcast",
+      "enabled": false,
+      "type": "udp",
+      "direction": "out",
+      "address": "255.255.255.255",
+      "port": 10111,
+      "coalesce": true
+    },
+    {
+      "name": "gps-serial",
+      "enabled": false,
+      "type": "serial",
+      "direction": "in",
+      "device": "/dev/ttyUSB0",
+      "baud": 4800
+    }
+  ],
+  "failovers": [],
+  "users": [
+    {
+      "username": "admin",
+      "password_hash": "$2y$10$REPLACE_ME_ON_FIRST_INSTALL",
+      "role": "admin"
+    }
+  ]
+}

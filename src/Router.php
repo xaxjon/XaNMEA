@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace XaNmea;
 
+use XaNmea\Io\Iface;
+
 /**
  * Router: fan-out of validated sentences from inputs to outputs.
  * Owns failover state. Knows nothing about sockets - only Iface objects.

@@ -202,7 +202,7 @@ final class Ais
                     'mmsi' => $mmsi,
                     'class' => 'A',
                     'name' => self::str6($bits, 112, 20),
-                    'callsign' => self::str6($bits, 90, 7),
+                    'callsign' => self::str6($bits, 70, 7),
                     'ship_type' => self::uint($bits, 232, 8),
                     'dim_bow' => self::uint($bits, 240, 9),
                     'dim_stern' => self::uint($bits, 249, 9),

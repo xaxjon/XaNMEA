@@ -38,6 +38,7 @@ else
   echo "==> keeping existing /etc/xanmea/config.json"
 fi
 chown -R xanmea:xanmea /etc/xanmea /var/lib/xanmea /run/xanmea
+chmod 2775 /etc/xanmea   # group-write + setgid: UI (www-data) saves must keep group xanmea so the daemon can read config.json
 chmod 0660 /etc/xanmea/config.json
 
 # --- web UI

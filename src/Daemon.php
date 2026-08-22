@@ -173,7 +173,7 @@ final class Daemon
     }
 
     /** A faulting interface/control owner: log, close, let tick() retry. */
-    private function faultOwner(object $owner, string $op, Throwable $e): void
+    private function faultOwner(object $owner, string $op, \Throwable $e): void
     {
         if ($owner instanceof Iface) {
             $owner->noteError("$op fault: " . $e->getMessage());

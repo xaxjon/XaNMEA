@@ -87,6 +87,9 @@ header('Content-Type: text/html; charset=utf-8');
 </head>
 <body>
 <div class="login-box">
+  <a class="login-logo" href="https://www.xaxero.com" target="_blank" rel="noopener" title="Xaxero Software Engineering">
+    <img src="assets/xaxero-logo.png" alt="Xaxero">
+  </a>
   <div class="brandbig">Xa<span>NMEA</span></div>
   <?php if ($firstRun): ?>
     <h1>First run - create admin account</h1>
@@ -116,5 +119,6 @@ header('Content-Type: text/html; charset=utf-8');
     </form>
   <?php endif; ?>
 </div>
+<footer class="page-footer">&copy; <?= date('Y') ?> <a href="https://www.xaxero.com" target="_blank" rel="noopener">Xaxero Software Engineering</a></footer>
 </body>
 </html>

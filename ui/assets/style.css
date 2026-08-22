@@ -32,6 +32,18 @@ html, body {
 a { color: var(--cyan); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* footer pinned to the bottom of short pages */
+body { display: flex; flex-direction: column; min-height: 100vh; }
+.page { flex: 1; }
+.page-footer {
+  margin-top: auto;
+  text-align: center;
+  color: var(--faint);
+  font-size: 0.8rem;
+  padding: 1.4rem 1rem;
+}
+.page-footer a { color: var(--dim); }
+
 /* ---------- top bar ---------- */
 
 .topbar {
@@ -47,13 +59,23 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
 }
 .brand {
+  display: flex;
+  align-items: center;
+}
+.brand img {
+  height: 2.1rem;
+  width: auto;
+  display: block;
+}
+.brand:hover { text-decoration: none; }
+.prod {
   font-family: var(--mono);
   font-weight: 700;
   font-size: 1.25rem;
   letter-spacing: 0.08em;
   color: var(--fg);
 }
-.brand span { color: var(--green); }
+.prod span { color: var(--green); }
 .topbar nav { display: flex; gap: 0.25rem; flex-wrap: wrap; }
 .topbar nav a {
   color: var(--dim);
@@ -85,7 +107,7 @@ a:hover { text-decoration: underline; }
 
 /* ---------- layout ---------- */
 
-.page { padding: 1rem; max-width: 1500px; margin: 0 auto; }
+.page { padding: 1rem; max-width: 1500px; margin: 0 auto; width: 100%; }
 .page h1 {
   font-size: 1.15rem;
   font-weight: 600;
@@ -346,6 +368,15 @@ details.adv summary { cursor: pointer; color: var(--dim); font-size: 0.9rem; }
   padding: 1.6rem 1.8rem;
 }
 .login-box h1 { font-size: 1.1rem; color: var(--fg); margin: 0 0 1rem; }
+.login-box .login-logo img {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: #f2f7f5; /* logo wordmark is dark - needs a light chip on this theme */
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  margin-bottom: 0.9rem;
+}
 .login-box .brandbig {
   font-family: var(--mono); font-size: 1.6rem; font-weight: 700;
   letter-spacing: 0.08em; margin-bottom: 0.4rem;

@@ -234,7 +234,9 @@ function page_header(string $title, string $active): void
     echo '<link rel="stylesheet" href="assets/style.css">';
     echo '</head><body>';
     echo '<header class="topbar">';
-    echo '<div class="brand">Xa<span>NMEA</span></div>';
+    echo '<a class="brand" href="https://www.xaxero.com" target="_blank" rel="noopener" title="Xaxero Software Engineering">';
+    echo '<img src="assets/xaxero-mark.png" alt="Xaxero"></a>';
+    echo '<div class="prod">Xa<span>NMEA</span></div>';
     echo '<nav>';
     foreach ($nav as $href => [$label, $key]) {
         $cls = $key === $active ? ' class="active"' : '';
@@ -254,6 +256,8 @@ function page_header(string $title, string $active): void
 function page_footer(): void
 {
     echo '</main>';
+    echo '<footer class="page-footer">&copy; ' . date('Y') .
+        ' <a href="https://www.xaxero.com" target="_blank" rel="noopener">Xaxero Software Engineering</a></footer>';
     echo '<script>';
     // Shared: daemon-reachability banner, CSRF helper for fetch().
     echo <<<'JS'

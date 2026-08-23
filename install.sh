@@ -54,6 +54,17 @@ else
 fi
 echo "==> UI installed to $UI_DIR (point your web server docroot there, or: php -S 0.0.0.0:8080 -t $UI_DIR $UI_DIR/router.php)"
 
+# Ubuntu's hardened apache2 unit mounts /etc read-only inside Apache's
+# namespace (ProtectSystem=full). Without a carve-out every UI config
+# save fails with "Read-only file system" even though the filesystem
+# permissions are correct. Debian's unit is unhardened -> no-op there.
+if systemctl cat apache2.service 2>/dev/null | grep -q '^ProtectSystem='; then
+  mkdir -p /etc/systemd/system/apache2.service.d
+  printf '[Service]\nReadWritePaths=/etc/xanmea\n' > /etc/systemd/system/apache2.service.d/xanmea.conf
+  echo "==> apache2 has ProtectSystem hardening: added drop-in ReadWritePaths=/etc/xanmea"
+  echo "    (takes effect after: systemctl daemon-reload && systemctl restart apache2)"
+fi
+
 # --- systemd
 cp "$SRC_DIR/systemd/xanmead.service" /etc/systemd/system/
 systemctl daemon-reload

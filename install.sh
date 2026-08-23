@@ -8,6 +8,8 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "==> XaNMEA install from $SRC_DIR"
 
+[ "$(id -u)" -eq 0 ] || { echo "ERROR: run as root (sudo ./install.sh)"; exit 1; }
+
 # --- prerequisites
 need_php_ext() {
   php -m | grep -qi "^$1$" || { echo "ERROR: PHP extension '$1' missing"; exit 1; }
@@ -15,6 +17,14 @@ need_php_ext() {
 command -v php >/dev/null || { echo "ERROR: PHP CLI not installed (apt install php-cli)"; exit 1; }
 need_php_ext sockets
 need_php_ext pcntl
+
+# Serial config relies on stty; uutils coreutils (Ubuntu 25.10) ships an
+# stty that cannot set baud rates. The daemon falls back to busybox stty,
+# so warn early if neither a capable stty nor busybox is present.
+if stty --version 2>/dev/null | grep -qi uutils && ! command -v busybox >/dev/null; then
+  echo "==> WARNING: uutils stty detected and no busybox found."
+  echo "    Serial inputs need: apt install busybox-static"
+fi
 
 # --- user/group
 if ! id xanmea >/dev/null 2>&1; then
@@ -69,9 +79,13 @@ fi
 cp "$SRC_DIR/systemd/xanmead.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable xanmead
+# On reinstall/upgrade the running daemon still has the old code: bounce it.
+if systemctl is-active --quiet xanmead; then
+  systemctl restart xanmead
+  echo "==> restarted xanmead with the new code"
+fi
 echo ""
 echo "Done. Next steps:"
-echo "  1. Edit /etc/xanmea/config.json (or start the daemon and use the web UI)"
-echo "  2. systemctl start xanmead"
-echo "  3. Browse the UI (create the admin password on first visit)"
-echo "  4. Test rig: php $SRC_DIR/tools/simulator.php 4010 &"
+echo "  1. systemctl start xanmead   (already running if this was an upgrade)"
+echo "  2. Browse the UI (create the admin password on first visit)"
+echo "  3. Test rig: php $SRC_DIR/tools/simulator.php 4010 &"

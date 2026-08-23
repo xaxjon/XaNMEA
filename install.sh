@@ -48,6 +48,9 @@ cp -r "$SRC_DIR/ui/"* "$UI_DIR/"
 # www-data must reach the control socket: put it in the xanmea group
 if id www-data >/dev/null 2>&1; then
   usermod -aG xanmea www-data
+else
+  echo "==> NOTE: no www-data user found. If you install Apache/nginx+PHP later, run:"
+  echo "      usermod -aG xanmea www-data && systemctl restart apache2   (or php*-fpm)"
 fi
 echo "==> UI installed to $UI_DIR (point your web server docroot there, or: php -S 0.0.0.0:8080 -t $UI_DIR $UI_DIR/router.php)"
 

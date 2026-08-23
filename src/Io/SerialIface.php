@@ -65,10 +65,25 @@ class SerialIface extends Iface
             escapeshellarg($this->device),
             $this->baud
         );
-        exec("stty $args 2>&1", $out, $rc);
-        if ($rc !== 0) {
-            throw new \RuntimeException('stty failed on ' . $this->device . ': ' . implode(' ', $out));
+        // Some distros ship a limited stty that cannot set baud rates
+        // (e.g. uutils coreutils on Ubuntu 25.10: "invalid argument '4800'").
+        // Fall back to busybox stty, which implements the full flag set.
+        $errors = [];
+        foreach (['stty', 'busybox stty'] as $stty) {
+            if ($stty !== 'stty' && !is_file('/usr/bin/busybox') && !is_file('/bin/busybox')) {
+                continue;
+            }
+            $out = [];
+            exec("$stty $args 2>&1", $out, $rc);
+            if ($rc === 0) {
+                return;
+            }
+            $errors[] = "$stty: " . implode(' ', $out);
         }
+        throw new \RuntimeException(
+            'stty failed on ' . $this->device . ' (' . implode(' | ', $errors) . ')'
+            . ' - install GNU coreutils or busybox-static'
+        );
     }
 
     public function close(): void

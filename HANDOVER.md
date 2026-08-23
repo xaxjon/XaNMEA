@@ -88,8 +88,10 @@ Diagnostics live tail / clients / events; the four dashboard pages animate.
 
 Plug a USB-serial adapter with an NMEA feed (or a null-modem pair), add via UI:
 device `/dev/ttyUSB0`, baud 4800. The user `xanmea` must be in `dialout`
-(installer does this). `min 0 time 5` stty settings are used; if your distro's
-stty rejects a flag, that's the place to look (`src/Io/SerialIface.php`).
+(installer does this). `min 0 time 5` stty settings are used. Distros with a
+limited stty (uutils coreutils, e.g. Ubuntu 25.10) cannot set baud rates;
+`src/Io/SerialIface.php` falls back to `busybox stty` automatically —
+install `busybox-static` on such systems.
 
 ## Known limitations / TODO (v0.1)
 

@@ -44,7 +44,7 @@ final class Filter
                     'period' => isset($r['period']) ? max(0, (int)$r['period']) : 0,
                     'last' => 0.0,
                 ];
-                if ($r['match'] !== 'all') {
+                if (strcasecmp((string)$r['match'], 'all') !== 0) {
                     $rule['pattern'] = strtoupper(substr((string)$r['match'], 0, 5));
                 }
                 if (in_array($rule['op'], ['+', '-', '~'], true)) {
@@ -86,7 +86,7 @@ final class Filter
         }
         $this->rules[] = [
             'op' => $op,
-            'pattern' => $rest === 'all' ? null : strtoupper(substr($rest, 0, 5)),
+            'pattern' => strcasecmp($rest, 'all') === 0 ? null : strtoupper(substr($rest, 0, 5)),
             'src' => $src,
             'period' => $period,
             'last' => 0.0,

@@ -28,6 +28,20 @@ final class Logger
         if ($this->syslog) {
             openlog('xanmead', LOG_PID | LOG_NDELAY, LOG_DAEMON);
         }
+        // Logging must never stall the event loop on a full stderr pipe.
+        if (defined('STDERR')) {
+            @stream_set_blocking(STDERR, false);
+        }
+    }
+
+    /** Change the log level live (config reload); unknown levels are ignored. */
+    public function setLevel(string $level): void
+    {
+        $map = ['debug' => 0, 'info' => 1, 'notice' => 2, 'warning' => 3, 'error' => 4];
+        $new = $map[strtolower($level)] ?? null;
+        if ($new !== null) {
+            $this->level = $new;
+        }
     }
 
     public function debug(string $msg): void { $this->log(self::DEBUG, $msg); }

@@ -13,7 +13,7 @@ $root = __DIR__;
 
 // Normalize and block path traversal.
 $path = realpath($root . $uri);
-if ($path !== false && strncmp($path, $root, strlen($root)) === 0) {
+if ($path !== false && ($path === $root || strncmp($path, $root . DIRECTORY_SEPARATOR, strlen($root) + 1) === 0)) {
     if (is_file($path)) {
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         if ($ext === 'php') {

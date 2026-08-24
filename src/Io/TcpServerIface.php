@@ -20,9 +20,10 @@ class TcpServerIface extends Iface
     private int $port;
     /** @var resource|null listening stream */
     private $listenFd = null;
-    /** @var array<int,array{fd:resource,ip:string,since:float,inBuf:string,outQ:string[],sent:int}> */
+    /** @var array<int,array{fd:resource,ip:string,since:float,inBuf:string,outQ:string[],sent:int,drops:int}> */
     private array $clients = [];
     private int $nextClientId = 1;
+    private const MAX_CLIENTS = 32;
 
     public function __construct(array $def, Logger $log)
     {
@@ -159,13 +160,24 @@ class TcpServerIface extends Iface
             if ($fd === false) {
                 return;
             }
-            stream_set_blocking($fd, false);
             $peer = (string)@stream_socket_get_name($fd, true);
+            if (count($this->clients) >= self::MAX_CLIENTS) {
+                @fclose($fd);
+                $this->log->warning("{$this->name}: refusing client from $peer: client limit (" . self::MAX_CLIENTS . ") reached");
+                continue;
+            }
+            stream_set_blocking($fd, false);
+            if (function_exists('socket_import_stream')) {
+                $sock = @socket_import_stream($fd);
+                if ($sock !== false) {
+                    @socket_set_option($sock, SOL_SOCKET, SO_KEEPALIVE, 1);
+                }
+            }
             $ip = explode(':', $peer)[0] ?? $peer;
             $id = $this->nextClientId++;
             $this->clients[$id] = [
                 'fd' => $fd, 'ip' => $ip, 'since' => microtime(true),
-                'inBuf' => '', 'outQ' => [], 'sent' => 0,
+                'inBuf' => '', 'outQ' => [], 'sent' => 0, 'drops' => 0,
             ];
             $this->log->info("{$this->name}: client #{$id} connected from $peer");
         }
@@ -214,8 +226,9 @@ class TcpServerIface extends Iface
             if (count($c['outQ']) >= $this->qsize) {
                 // stalled client: drop oldest; if chronically stalled, kick
                 array_shift($c['outQ']);
+                $c['drops']++;
                 $this->counters['dropped']++;
-                if ($this->counters['dropped'] % 1000 === 0) {
+                if ($c['drops'] >= 1000) {
                     $this->dropClient($id, 'chronically stalled');
                     continue;
                 }

@@ -172,6 +172,7 @@ class SerialIface extends Iface
             $line = $this->outQ[0];
             $n = @fwrite($fd, $line);
             if ($n === false) {
+                $this->failToRetry('write error');
                 return;
             }
             if ($n === 0) {

@@ -44,14 +44,18 @@ final class Ais
         if (!$this->payloadValid($payload)) {
             return null;
         }
+        $this->expireFragments();
 
         if ($total === 1) {
             return $this->decodePayload($payload, $fill);
         }
 
-        // Multi-part reassembly
+        // Multi-part reassembly: seq/channel become buffer keys, so validate
+        // them before use (seq is a single digit, channel a single char).
+        if (!preg_match('/^[0-9]$/', $seq) || strlen($channel) !== 1) {
+            return null;
+        }
         $key = $s->srcName . '|' . $channel . '|' . $seq;
-        $this->expireFragments();
         if ($num === 1 || !isset($this->fragments[$key])) {
             $this->fragments[$key] = ['ts' => microtime(true), 'payload' => '', 'fill' => 0, 'total' => $total, 'got' => []];
         }

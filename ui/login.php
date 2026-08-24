@@ -43,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($res !== true) {
                 $error = 'Cannot write config: ' . $res;
             } else {
+                session_regenerate_id(true);
                 $_SESSION['xan_user'] = $username;
                 $_SESSION['xan_role'] = 'admin';
                 header('Location: index.php');

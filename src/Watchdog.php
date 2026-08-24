@@ -56,6 +56,8 @@ final class Watchdog
         if ($sock === false) {
             return;
         }
+        // Never let a backed-up systemd block the event loop on sendto.
+        @socket_set_nonblock($sock);
         $this->notifySock = $sock;
         $this->notifyAddr = $addr;
     }

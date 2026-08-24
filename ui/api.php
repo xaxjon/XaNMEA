@@ -144,6 +144,17 @@ switch ($action) {
         if (!$replaced) {
             $cfg['interfaces'][] = $def;
         }
+        // Same guard as delete/toggle: never write a config with zero
+        // enabled interfaces (missing 'enabled' key counts as enabled).
+        $enabledLeft = 0;
+        foreach ($cfg['interfaces'] as $if) {
+            if (!array_key_exists('enabled', $if) || !empty($if['enabled'])) {
+                $enabledLeft++;
+            }
+        }
+        if ($enabledLeft === 0) {
+            reply(['ok' => false, 'error' => 'cannot save: daemon requires at least one enabled interface']);
+        }
         save_and_reload($cfg, "interface '{$def['name']}' saved");
     }
 
@@ -164,7 +175,7 @@ switch ($action) {
         }
         $enabledLeft = 0;
         foreach ($remaining as $if) {
-            if (!empty($if['enabled'])) {
+            if (!array_key_exists('enabled', $if) || !empty($if['enabled'])) {
                 $enabledLeft++;
             }
         }
@@ -192,7 +203,7 @@ switch ($action) {
         if (!$enabled) {
             $enabledLeft = 0;
             foreach ($cfg['interfaces'] as $if) {
-                if (!empty($if['enabled'])) {
+                if (!array_key_exists('enabled', $if) || !empty($if['enabled'])) {
                     $enabledLeft++;
                 }
             }

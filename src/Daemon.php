@@ -40,6 +40,10 @@ final class Daemon
     private array $ifaces = [];
     /** @var array<string,string> config hash per iface key, for change detection */
     private array $defHashes = [];
+    /** @var array<string,float> next daemon-driven reopen attempt per iface key */
+    private array $reopenAfter = [];
+    /** @var array<string,mixed>|null daemon section in effect (null until boot config applied) */
+    private ?array $daemonOpts = null;
 
     private bool $running = true;
     private bool $reloadRequested = false;
@@ -181,9 +185,9 @@ final class Daemon
                 $owner->close();
             } catch (\Throwable $ignored) {
             }
-            if ($owner instanceof TcpClientIface || $owner instanceof SerialIface) {
-                $owner->state = 'retry'; // tick() will reopen
-            }
+            // All iface types get retried: TcpClientIface/SerialIface reopen in
+            // their own tick(), TcpServerIface/UdpIface via Daemon::tick().
+            $owner->state = 'retry';
             return;
         }
         $this->log->error('control server fault (' . $op . '): ' . $e->getMessage());
@@ -199,7 +203,7 @@ final class Daemon
             return; // handled in loop after tick
         }
 
-        foreach ($this->ifaces as $if) {
+        foreach ($this->ifaces as $key => $if) {
             if (!$if->enabled) {
                 continue;
             }
@@ -207,6 +211,22 @@ final class Daemon
                 $if->tick($now);
             } catch (\Throwable $e) {
                 $if->noteError('tick fault: ' . $e->getMessage());
+            }
+            // TcpServerIface/UdpIface cannot self-reopen after a fault;
+            // the daemon retries them here, bounded to one attempt per 5s.
+            if (($if->state === 'retry' || $if->state === 'down')
+                && !$if instanceof TcpClientIface && !$if instanceof SerialIface
+                && $now >= ($this->reopenAfter[$key] ?? 0.0)
+            ) {
+                try {
+                    $if->open();
+                    $if->counters['reconnects']++;
+                    unset($this->reopenAfter[$key]);
+                } catch (\Throwable $e) {
+                    $if->noteError('reopen failed: ' . $e->getMessage());
+                    $if->state = 'retry';
+                    $this->reopenAfter[$key] = $now + 5.0;
+                }
             }
         }
 
@@ -243,6 +263,7 @@ final class Daemon
 
     private function applyConfig(Config $config): void
     {
+        $this->applyDaemonOptions($config->daemon);
         $this->router->setFailovers($config->failovers);
 
         $wanted = [];
@@ -258,7 +279,7 @@ final class Daemon
                     $if->close();
                 } catch (\Throwable $e) {
                 }
-                unset($this->ifaces[$key], $this->defHashes[$key]);
+                unset($this->ifaces[$key], $this->defHashes[$key], $this->reopenAfter[$key]);
             }
         }
 
@@ -275,7 +296,7 @@ final class Daemon
                     $existing->close();
                 } catch (\Throwable $e) {
                 }
-                unset($this->ifaces[$key], $this->defHashes[$key]);
+                unset($this->ifaces[$key], $this->defHashes[$key], $this->reopenAfter[$key]);
             }
             if (!$def['enabled']) {
                 $this->log->info($def['name'] . ': disabled');
@@ -297,6 +318,35 @@ final class Daemon
         }
 
         $this->router->setOutputs($this->ifaces);
+    }
+
+    /**
+     * Apply the daemon section on boot and reload. Settings that can change
+     * live are pushed to their consumers; path relocations only warn.
+     */
+    private function applyDaemonOptions(array $d): void
+    {
+        if ($this->daemonOpts === null) {
+            // boot: everything was already set via the constructors
+            $this->daemonOpts = $d;
+            return;
+        }
+        // Logger::setLevel() lands with the logger audit fix; guard until then.
+        if (!$this->debug && method_exists($this->log, 'setLevel')) {
+            $this->log->setLevel($d['log_level']);
+        }
+        // StateStore::configure() lands with the state-store audit fix; guard until then.
+        if (method_exists($this->state, 'configure')) {
+            $this->state->configure($d['ais_max_targets'], $d['ais_stale_sec'], $d['ais_drop_sec']);
+        }
+        // TODO: stream_qsize is not live-appliable: ControlServer has no setter
+        foreach (['control_socket', 'heartbeat_file'] as $k) {
+            if ($this->daemonOpts[$k] !== $d[$k]) {
+                $this->log->warning("$k change requires restart (still using {$this->daemonOpts[$k]})");
+            }
+        }
+        // checksum/strict/qsize defaults flow through the iface def hashes:
+        // a changed default rebuilds the affected interfaces in applyConfig().
     }
 
     private function defHash(array $def): string

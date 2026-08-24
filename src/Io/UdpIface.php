@@ -30,9 +30,11 @@ class UdpIface extends Iface
     /** @var resource|null exported stream for select loop */
     private $fd = null;
     private string $inBuf = '';
-    /** @var array<int,array<string,string>> coalesce buffers per AIS channel/seq */
+    /** @var array<string,array{t:float,parts:array<int,string>}> coalesce buffers per AIS channel/seq */
     private array $coalBuf = [];
     private string $mode = 'unicast'; // unicast|broadcast|multicast
+    /** @var string|null resolved numeric IP, cached for the iface lifetime ('' = unresolvable) */
+    private ?string $resolvedAddr = null;
 
     public function __construct(array $def, Logger $log)
     {
@@ -137,15 +139,18 @@ class UdpIface extends Iface
                 $this->inBuf = substr($this->inBuf, $pos + 1);
                 $this->handleInputLine($line);
             }
-            // NMEA sentences are line-terminated; a datagram ending without
-            // \n is treated as one complete line.
-            if ($this->inBuf !== '' && strlen($this->inBuf) < 1024) {
-                $rest = $this->inBuf;
-                $this->inBuf = '';
-                $this->handleInputLine($rest . "\n");
-            } elseif (strlen($this->inBuf) >= 65536) {
-                $this->inBuf = '';
-                $this->counters['parse_err']++;
+            // UDP datagrams are atomic: a newline-less remainder is either a
+            // complete line (some senders omit the terminator) or garbage to
+            // discard - but never glue it onto the next datagram.
+            if ($this->inBuf !== '') {
+                if (strlen($this->inBuf) < 1024) {
+                    $rest = $this->inBuf;
+                    $this->inBuf = '';
+                    $this->handleInputLine($rest . "\n");
+                } else {
+                    $this->inBuf = '';
+                    $this->counters['parse_err']++;
+                }
             }
         }
     }
@@ -168,7 +173,11 @@ class UdpIface extends Iface
 
     private function send(string $payload): void
     {
-        $dest = $this->address;
+        $dest = $this->destAddress();
+        if ($dest === '') {
+            $this->counters['dropped']++;
+            return;
+        }
         $n = @socket_sendto($this->sock, $payload, strlen($payload), 0, $dest, $this->port);
         if ($n === false) {
             $this->noteError('udp send failed: ' . socket_strerror(socket_last_error($this->sock)));
@@ -177,6 +186,31 @@ class UdpIface extends Iface
         $this->counters['out']++;
         $this->counters['bytes_out'] += $n;
         $this->lastActivity = microtime(true);
+    }
+
+    /**
+     * Resolve the destination hostname once and cache the numeric IP for
+     * the iface lifetime: gethostbyname() blocks the event loop, so it
+     * must not run per datagram.
+     */
+    private function destAddress(): string
+    {
+        if ($this->resolvedAddr !== null) {
+            return $this->resolvedAddr;
+        }
+        $this->resolvedAddr = '';
+        if (filter_var($this->address, FILTER_VALIDATE_IP)) {
+            $this->resolvedAddr = $this->address;
+        } else {
+            $ip = gethostbyname($this->address);
+            if ($ip !== $this->address && filter_var($ip, FILTER_VALIDATE_IP)) {
+                $this->resolvedAddr = $ip;
+            }
+        }
+        if ($this->resolvedAddr === '') {
+            $this->noteError("cannot resolve {$this->address}");
+        }
+        return $this->resolvedAddr;
     }
 
     // ---- AIS multi-part coalescing (single-buffer, kplex-style) ----
@@ -197,26 +231,49 @@ class UdpIface extends Iface
 
     private function coalBuffer(Sentence $s): void
     {
-        $key = $s->fields[3] ?? 'A';
-        if (strlen(implode('', $this->coalBuf[$key] ?? [])) > 400) {
+        $key = ($s->fields[3] ?? 'A') . ':' . ($s->fields[2] ?? '');
+        if (strlen(implode('', $this->coalBuf[$key]['parts'] ?? [])) > 400) {
             unset($this->coalBuf[$key]); // overflow: drop buffer, send fragment alone
             $this->send($s->raw . "\r\n");
             return;
         }
-        $this->coalBuf[$key][(int)$s->fields[1]] = $s->raw;
+        if (!isset($this->coalBuf[$key]) && count($this->coalBuf) >= 8) {
+            // cap: drop the oldest buffer (keys derive from wire data)
+            $oldest = array_key_first($this->coalBuf);
+            foreach ($this->coalBuf as $k => $b) {
+                if ($b['t'] < $this->coalBuf[$oldest]['t']) {
+                    $oldest = $k;
+                }
+            }
+            unset($this->coalBuf[$oldest]);
+            $this->counters['dropped']++;
+        }
+        $this->coalBuf[$key]['t'] = microtime(true);
+        $this->coalBuf[$key]['parts'][(int)$s->fields[1]] = $s->raw;
     }
 
     private function coalFlushWith(Sentence $last): string
     {
-        $key = $last->fields[3] ?? 'A';
-        $buf = $this->coalBuf[$key] ?? [];
-        unset($this->coalBuf[$key]);
+        $key = ($last->fields[3] ?? 'A') . ':' . ($last->fields[2] ?? '');
+        $buf = $this->coalBuf[$key]['parts'] ?? [];
         if (!$buf || !$this->isAisFragment($last)) {
             return $last->raw;
         }
+        unset($this->coalBuf[$key]);
         $buf[(int)$last->fields[1]] = $last->raw;
         ksort($buf);
         return implode("\r\n", $buf);
+    }
+
+    /** Expire stale coalesce buffers so wire-keyed state cannot accumulate. */
+    public function tick(float $now): void
+    {
+        foreach ($this->coalBuf as $key => $buf) {
+            if ($now - $buf['t'] > 10.0) {
+                unset($this->coalBuf[$key]);
+                $this->counters['dropped']++;
+            }
+        }
     }
 
     public function statsRow(): array

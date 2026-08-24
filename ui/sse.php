@@ -47,8 +47,7 @@ if ($stream === 'tail') {
 @ini_set('output_buffering', 'off');
 @ini_set('zlib.output_compression', 'off');
 @set_time_limit(0);
-while (ob_get_level() > 0) {
-    @ob_end_clean();
+while (ob_get_level() > 0 && @ob_end_clean()) {
 }
 
 header('Content-Type: text/event-stream');

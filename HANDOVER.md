@@ -100,7 +100,7 @@ install `busybox-static` on such systems.
 - Serial path untested (needs real hardware).
 - Failover config exists in daemon; failover UI is minimal/absent in v1 UI.
 - pty/file interfaces, GoFree, recording: not implemented (v2 per DESIGN.md).
-- `socket_export_stream` + `socket_sendto` pairing in UdpIface is the least
-  certain piece; if UDP input misbehaves, check there first.
+- UDP I/O verified incl. AIS multi-part coalescing (audit 2026-08: fragment
+  buffers are keyed channel+seq, capped at 8 with 10 s expiry).
 - AIS decoder covers msg types 1/2/3/5/18/19/21/24/27; others register as
   `undecoded`.

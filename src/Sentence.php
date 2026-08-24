@@ -145,7 +145,7 @@ final class Sentence
             $tag = self::buildTagBlock(
                 $srcTag,
                 $timestampMode === 's' ? (int)$this->ts : null,
-                $timestampMode === 'ms' ? (int)$this->ts : null
+                $timestampMode === 'ms' ? (int)($this->ts * 1000) : null
             );
             if ($tag !== null) {
                 $line = $tag . $line;

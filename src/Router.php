@@ -121,7 +121,7 @@ final class Router
                 }
             }
             if ($myLevel === null) {
-                return false; // not in the failover list: never passes matching data
+                continue; // rule does not govern this source
             }
             $myDelay = $fo['priorities'][$myLevel]['delay'];
             // Check all higher-priority interfaces for recent matching data

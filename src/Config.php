@@ -120,11 +120,12 @@ final class Config
                 'enabled' => $this->bool($raw, 'enabled', true),
                 'type' => $type,
                 'direction' => $direction,
-                'checksum' => $this->boolNullable($raw, 'checksum'),
-                'strict' => $this->boolNullable($raw, 'strict'),
+                // Per-iface value wins; unset falls back to the daemon default.
+                'checksum' => $this->boolNullable($raw, 'checksum') ?? $this->daemon['checksum'],
+                'strict' => $this->boolNullable($raw, 'strict') ?? $this->daemon['strict'],
                 'optional' => $this->bool($raw, 'optional', true),
                 'loopback' => $this->bool($raw, 'loopback', false),
-                'qsize' => max(10, $this->int($raw, 'qsize', 0)), // 0 => inherit daemon default
+                'qsize' => ($q = $this->int($raw, 'qsize', 0)) > 0 ? max(10, $q) : $this->daemon['qsize'], // 0/unset => daemon default
                 'srctag' => $this->str($raw, 'srctag', 'no'),
                 'timestamp' => $this->str($raw, 'timestamp', 'no'),
                 'ifilter' => $raw['ifilter'] ?? null,

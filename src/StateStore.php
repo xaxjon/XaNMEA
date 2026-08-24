@@ -37,6 +37,7 @@ final class StateStore
     // history ring sizes
     private const WIND_RING = 600;      // ~10 min @ 1 Hz
     private const PRESSURE_RING = 1440; // 24 h @ 1/min
+    private const MISC_MAX = 64;        // hard cap on misc registry keys
 
     private float $lastPressureSample = 0.0;
 
@@ -50,6 +51,14 @@ final class StateStore
     public function setDeltaHook(callable $cb): void
     {
         $this->deltaHook = $cb;
+    }
+
+    /** Live-update AIS table limits (config reload). */
+    public function configure(int $aisMax, int $aisStaleSec, int $aisDropSec): void
+    {
+        $this->aisMax = $aisMax;
+        $this->aisStaleSec = $aisStaleSec;
+        $this->aisDropSec = $aisDropSec;
     }
 
     /** Merge fields into ownship and emit delta. */
@@ -153,6 +162,20 @@ final class StateStore
     {
         $now = microtime(true);
         $prev = $this->misc[$key] ?? null;
+        if ($prev === null && count($this->misc) >= self::MISC_MAX) {
+            // Map full: evict the entry with the oldest ts before inserting.
+            $oldestKey = null;
+            $oldestTs = PHP_FLOAT_MAX;
+            foreach ($this->misc as $k => $entry) {
+                if (($entry['ts'] ?? 0.0) < $oldestTs) {
+                    $oldestTs = $entry['ts'] ?? 0.0;
+                    $oldestKey = $k;
+                }
+            }
+            if ($oldestKey !== null) {
+                unset($this->misc[$oldestKey]);
+            }
+        }
         $this->misc[$key] = [
             'talker' => $talker,
             'type' => $type,
@@ -260,6 +283,9 @@ final class StateStore
                 'misc' => $this->misc,
                 'sentences' => $this->sentences,
             ];
+        }
+        if (!in_array($section, ['ownship', 'ais', 'weather', 'misc', 'sentences'], true)) {
+            return ['error' => 'unknown section'];
         }
         return [$section => $this->{$section} ?? null];
     }

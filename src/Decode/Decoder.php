@@ -309,9 +309,13 @@ final class Decoder
         if ($stw !== null) {
             $out['stw'] = $stw;
         }
-        $hdg = self::num($f, 0);
+        $hdg = self::num($f, 0); // true heading
         if ($hdg !== null) {
-            $out['hdg_mag'] = $hdg;
+            $out['hdg'] = $hdg;
+        }
+        $hdgMag = self::num($f, 2); // magnetic heading
+        if ($hdgMag !== null) {
+            $out['hdg_mag'] = $hdgMag;
         }
         return $out ?: null;
     }
@@ -331,17 +335,17 @@ final class Decoder
     {
         $f = $s->fields;
         $out = [];
-        $xte = self::num($f, 1);
-        $xteDir = self::f($f, 2);
+        $xte = self::num($f, 2);
+        $xteDir = self::f($f, 3);
         if ($xte !== null) {
             $out['xte_nm'] = ($xteDir === 'L' ? -1 : 1) * $xte;
         }
-        $btw = self::num($f, 9); // bearing to waypoint, true (v2.x) or mag
+        $btw = self::num($f, 10); // bearing present->dest, true (v2.x) or mag
         if ($btw !== null) {
             $out['btw_deg'] = $btw;
         }
-        if (self::f($f, 13) !== null) {
-            $out['waypoint'] = self::f($f, 13);
+        if (self::f($f, 9) !== null) {
+            $out['waypoint'] = self::f($f, 9);
         }
         return $out ?: null;
     }
@@ -466,7 +470,7 @@ final class Decoder
         if ($airT !== null) {
             $out['air_temp'] = $airT;
         }
-        $hum = self::num($f, 11);
+        $hum = self::num($f, 8);
         if ($hum !== null) {
             $out['humidity'] = $hum;
         }
@@ -534,7 +538,11 @@ final class Decoder
         $rpm = self::num($f, 2);
         $src = self::f($f, 1) ?? 'engine';
         if ($rpm !== null) {
-            $this->state->updateMisc('RPM' . $src, $s->talker, 'RPM', ['rpm' => $rpm, 'source' => $src]);
+            $key = substr(preg_replace('/[^A-Za-z0-9]/', '', $src), 0, 8);
+            if ($key === '') {
+                $key = '0';
+            }
+            $this->state->updateMisc('RPM' . $key, $s->talker, 'RPM', ['rpm' => $rpm, 'source' => $src]);
         }
     }
 

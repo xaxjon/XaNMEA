@@ -97,9 +97,9 @@ final class ControlServer
             $fds[] = $this->listenFd;
         }
         foreach ($this->clients as $c) {
-            if ($c['mode'] === 'cmd') {
-                $fds[] = $c['fd'];
-            }
+            // Monitor every client, not just cmd-mode ones, so stream/tail
+            // disconnects are detected even on a quiet daemon.
+            $fds[] = $c['fd'];
         }
         return $fds;
     }
@@ -137,7 +137,14 @@ final class ControlServer
             $this->drop($id);
             return;
         }
+        if ($this->clients[$id]['mode'] !== 'cmd') {
+            return; // stream/tail client: consume-and-discard (EOF detection only)
+        }
         $this->clients[$id]['inBuf'] .= $data;
+        if (strlen($this->clients[$id]['inBuf']) > 65536) {
+            $this->drop($id); // runaway input: drop, never buffer unbounded
+            return;
+        }
         while (($pos = strpos($this->clients[$id]['inBuf'], "\n")) !== false) {
             $line = trim(substr($this->clients[$id]['inBuf'], 0, $pos));
             $this->clients[$id]['inBuf'] = substr($this->clients[$id]['inBuf'], $pos + 1);
@@ -200,7 +207,8 @@ final class ControlServer
                     }
                 }
                 $this->push($id, json_encode($reply) . "\n");
-                if ($this->clients[$id]['mode'] === 'cmd') {
+                // push() drops slow consumers; the client may be gone now.
+                if (isset($this->clients[$id]) && $this->clients[$id]['mode'] === 'cmd') {
                     $this->clients[$id]['mode'] = 'close-after-flush';
                 }
                 break;
@@ -237,7 +245,7 @@ final class ControlServer
                     'dst' => $dst,
                     'raw' => $raw,
                     'valid' => $valid,
-                ]) . "\n";
+                ], JSON_INVALID_UTF8_SUBSTITUTE) . "\n";
             }
             $this->push($id, $line);
         }
@@ -252,7 +260,7 @@ final class ControlServer
                 continue;
             }
             if ($line === null) {
-                $line = json_encode(['ts' => microtime(true), 'd' => $delta]) . "\n";
+                $line = json_encode(['ts' => microtime(true), 'd' => $delta], JSON_INVALID_UTF8_SUBSTITUTE) . "\n";
             }
             $this->push($id, $line);
         }

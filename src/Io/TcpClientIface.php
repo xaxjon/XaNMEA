@@ -31,6 +31,8 @@ class TcpClientIface extends Iface
     private string $inBuf = '';
     /** @var string[] */
     private array $outQ = [];
+    /** @var string|null resolved numeric IP, cached for the iface lifetime ('' = unresolvable) */
+    private ?string $resolvedAddr = null;
 
     public function __construct(array $def, Logger $log)
     {
@@ -53,10 +55,19 @@ class TcpClientIface extends Iface
 
     private function tryConnect(float $now): void
     {
+        $dest = $this->destAddress();
+        if ($dest === '') {
+            $this->state = 'retry';
+            $this->nextRetry = $now + $this->retry;
+            if ($this->lastError !== "cannot resolve {$this->address}") {
+                $this->noteError("cannot resolve {$this->address}");
+            }
+            return;
+        }
         $errno = 0;
         $errstr = '';
         $fd = @stream_socket_client(
-            "tcp://{$this->address}:{$this->port}",
+            "tcp://{$dest}:{$this->port}",
             $errno,
             $errstr,
             5,
@@ -73,6 +84,28 @@ class TcpClientIface extends Iface
         $this->connecting = true;
         $this->connectStart = $now;
         $this->state = 'connecting';
+    }
+
+    /**
+     * Resolve the remote hostname once and cache the numeric IP for the
+     * iface lifetime: gethostbyname() blocks the event loop, so it must
+     * not run on every connect retry.
+     */
+    private function destAddress(): string
+    {
+        if ($this->resolvedAddr !== null) {
+            return $this->resolvedAddr;
+        }
+        $this->resolvedAddr = '';
+        if (filter_var($this->address, FILTER_VALIDATE_IP)) {
+            $this->resolvedAddr = $this->address;
+        } else {
+            $ip = gethostbyname($this->address);
+            if ($ip !== $this->address && filter_var($ip, FILTER_VALIDATE_IP)) {
+                $this->resolvedAddr = $ip;
+            }
+        }
+        return $this->resolvedAddr;
     }
 
     private function finishConnect(float $now): void

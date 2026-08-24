@@ -290,8 +290,11 @@ function page_footer(): void
         // tolerate transient failures (page swap, busy daemon): only show
         // the banner after two consecutive failed pings
         if (++daemonFails >= 2) {
-          el.innerHTML = '<div class="banner err">Daemon unreachable: ' +
-            (j.error || 'no reply') + '</div>';
+          const div = document.createElement('div');
+          div.className = 'banner err';
+          div.textContent = 'Daemon unreachable: ' + (j.error || 'no reply');
+          el.innerHTML = '';
+          el.appendChild(div);
         }
       }
     } catch (e) {

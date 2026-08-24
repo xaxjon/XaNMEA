@@ -38,8 +38,10 @@ final class StateStore
     private const WIND_RING = 600;      // ~10 min @ 1 Hz
     private const PRESSURE_RING = 1440; // 24 h @ 1/min
     private const MISC_MAX = 64;        // hard cap on misc registry keys
+    private const PRESSURE_EMA_ALPHA = 0.1; // ~10-sample time constant
 
     private float $lastPressureSample = 0.0;
+    private ?float $pressureEma = null;
 
     public function __construct(int $aisMax, int $aisStaleSec, int $aisDropSec)
     {
@@ -135,6 +137,16 @@ final class StateStore
     public function updateWeather(array $fields): void
     {
         $now = microtime(true);
+        if (isset($fields['pressure'])) {
+            // Multiple pressure sources (MDA/XDR) disagree slightly and
+            // alternate each cycle: display an EMA, keep the raw sample.
+            $raw = (float)$fields['pressure'];
+            $fields['pressure_raw'] = $raw;
+            $this->pressureEma = $this->pressureEma === null
+                ? $raw
+                : $this->pressureEma + self::PRESSURE_EMA_ALPHA * ($raw - $this->pressureEma);
+            $fields['pressure'] = round($this->pressureEma, 1);
+        }
         foreach ($fields as $k => $v) {
             $this->weather['latest'][$k] = ['v' => $v, 'ts' => $now];
         }

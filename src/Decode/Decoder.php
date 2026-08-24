@@ -460,9 +460,9 @@ final class Decoder
         $f = $s->fields;
         $out = [];
         $baroIn = self::num($f, 0);
-        $baroMb = self::num($f, 2);
-        if ($baroMb !== null) {
-            $out['pressure'] = round($baroMb, 1);
+        $baroBar = self::num($f, 2); // field 2 is BARS (the 'B' unit literal follows)
+        if ($baroBar !== null) {
+            $out['pressure'] = round($baroBar * 1000, 1); // bar -> mbar
         } elseif ($baroIn !== null) {
             $out['pressure'] = round($baroIn * 33.8639, 1);
         }

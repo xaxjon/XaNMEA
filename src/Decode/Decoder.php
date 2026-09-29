@@ -35,11 +35,13 @@ final class Decoder
 
         switch ($t) {
             case 'GGA': $ownship = $this->gga($s); break;
+            case 'GNS': $ownship = $this->gns($s); break;
             case 'GLL': $ownship = $this->gll($s); break;
             case 'RMC': $ownship = $this->rmc($s); break;
             case 'VTG': $ownship = $this->vtg($s); break;
             case 'GSA': $ownship = $this->gsa($s); break;
             case 'GSV': $this->gsv($s); break;
+            case 'ZDA': $ownship = $this->zda($s); break;
             case 'HDT': $ownship = $this->hdt($s); break;
             case 'HDG': $ownship = $this->hdg($s); break;
             case 'HDM': $ownship = $this->hdm($s); break;
@@ -160,12 +162,95 @@ final class Decoder
     private function gll(Sentence $s): ?array
     {
         $f = $s->fields;
+        $out = [];
+        // Status field: A = valid, V = invalid; mode (NMEA 2.3+) at index 6.
+        $status = self::f($f, 5);
+        if ($status !== null) {
+            $out['fix_active'] = ($status === 'A');
+            $out['fix_quality'] = ($status === 'A') ? 1 : 0;
+        }
+        if ($status === 'V') {
+            return $out; // don't trust position in a void GLL
+        }
         $lat = self::latlon(self::f($f, 0), self::f($f, 1));
         $lon = self::latlon(self::f($f, 2), self::f($f, 3));
-        if ($lat === null || $lon === null) {
-            return null;
+        if ($lat !== null && $lon !== null) {
+            $out['lat'] = $lat;
+            $out['lon'] = $lon;
         }
-        return ['lat' => $lat, 'lon' => $lon];
+        return $out ?: null;
+    }
+
+    /**
+     * GNS: the multi-GNSS replacement for GGA.
+     * $--GNS,utc,lat,NS,lon,EW,mode,numSV,HDOP,alt,sep,age,station[,navStatus]
+     * mode is one char per constellation: N=none A=autonomous D=differential
+     * P=precise R=RTK-fixed F=RTK-float E=estimated/DR M=manual S=simulator.
+     */
+    private function gns(Sentence $s): ?array
+    {
+        $f = $s->fields;
+        $out = [];
+        $lat = self::latlon(self::f($f, 1), self::f($f, 2));
+        $lon = self::latlon(self::f($f, 3), self::f($f, 4));
+        if ($lat !== null && $lon !== null) {
+            $out['lat'] = $lat;
+            $out['lon'] = $lon;
+        }
+
+        // Best fix across constellations, mapped onto GGA-style fix_quality.
+        $mode = strtoupper((string)self::f($f, 5));
+        $best = 0;
+        for ($i = 0; $i < strlen($mode); $i++) {
+            $q = match ($mode[$i]) {
+                'A', 'P' => 1,
+                'D' => 2,
+                'F' => 5,
+                'R' => 4,
+                'E', 'M', 'S' => 6,
+                default => 0,
+            };
+            $best = max($best, $q);
+        }
+        $out['fix_quality'] = $best;
+        $out['fix_active'] = $best > 0;
+        if ($mode !== '') {
+            $out['fix_mode'] = $mode;
+        }
+
+        $sats = self::num($f, 6);
+        if ($sats !== null) {
+            $out['sats'] = (int)$sats;
+        }
+        $hdop = self::num($f, 7);
+        if ($hdop !== null) {
+            $out['hdop'] = $hdop;
+        }
+        $alt = self::num($f, 8);
+        if ($alt !== null) {
+            $out['altitude_m'] = $alt;
+        }
+        if (self::f($f, 0) !== null) {
+            $out['utc'] = self::f($f, 0);
+        }
+        return $out;
+    }
+
+    /** ZDA: time & date. $--ZDA,hhmmss.ss,dd,mm,yyyy,lzh,lzn */
+    private function zda(Sentence $s): ?array
+    {
+        $f = $s->fields;
+        $out = [];
+        if (self::f($f, 0) !== null) {
+            $out['utc'] = self::f($f, 0);
+        }
+        $d = self::f($f, 1);
+        $m = self::f($f, 2);
+        $y = self::f($f, 3);
+        if ($d !== null && $m !== null && $y !== null) {
+            $out['date'] = sprintf('%02d%02d%02d', (int)$d, (int)$m, ((int)$y) % 100);
+        }
+        return $out ?: null;
     }
 
     private function rmc(Sentence $s): ?array

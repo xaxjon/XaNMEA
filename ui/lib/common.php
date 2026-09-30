@@ -318,6 +318,46 @@ const XAN_TYPES = ['serial', 'tcp_server', 'tcp_client', 'udp'];
 const XAN_DIRECTIONS = ['in', 'out', 'both'];
 const XAN_BAUDS = [4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800];
 
+/** Sentence classes for structured filters - mirrors src/Filter.php CLASSES. */
+const XAN_FILTER_CLASSES = ['all', 'navigation', 'ais', 'weather', 'alarms', 'custom'];
+
+/**
+ * Validate a structured filter object {"rules":[...]}.
+ * Mirrors Config::validateFilter() in the daemon. Returns error string or null.
+ */
+function xan_validate_filter(array $v): ?string
+{
+    if (!isset($v['rules']) || !is_array($v['rules'])) {
+        return 'must be a rules object';
+    }
+    foreach ($v['rules'] as $i => $r) {
+        if (!is_array($r)) {
+            return "rule $i: not an object";
+        }
+        $action = $r['action'] ?? '';
+        if (!in_array($action, ['pass', 'drop'], true)) {
+            return "rule $i: action must be pass|drop";
+        }
+        $class = strtolower((string)($r['class'] ?? 'all'));
+        if (!in_array($class, XAN_FILTER_CLASSES, true)) {
+            return "rule $i: unknown class '$class'";
+        }
+        if ($class === 'custom') {
+            $match = strtoupper(trim((string)($r['match'] ?? '')));
+            if ($match === '' || !preg_match('/^[A-Z0-9*]{1,5}$/', $match)) {
+                return "rule $i: custom class needs a 1-5 char match pattern (A-Z 0-9 *)";
+            }
+        }
+        if (isset($r['src']) && $r['src'] !== '' && !preg_match('/^[A-Za-z0-9_-]{1,32}$/', (string)$r['src'])) {
+            return "rule $i: bad source interface name";
+        }
+        if (isset($r['limit_s']) && (!is_numeric($r['limit_s']) || (int)$r['limit_s'] < 0)) {
+            return "rule $i: limit_s must be >= 0";
+        }
+    }
+    return null;
+}
+
 /**
  * Validate a raw interface definition from the edit form.
  * @param array<string,bool> $takenNames lowercased names already in use
@@ -376,9 +416,17 @@ function xan_validate_interface(array $raw, array $takenNames = []): array
         }
     }
     foreach (['ifilter', 'ofilter'] as $k) {
-        $v = trim((string)($raw[$k] ?? ''));
-        if ($v !== '') {
-            $def[$k] = $v;
+        $v = $raw[$k] ?? null;
+        if (is_array($v)) {
+            $ferr = xan_validate_filter($v);
+            if ($ferr !== null) {
+                $errors[] = "$k: $ferr";
+            } elseif (!empty($v['rules'])) {
+                $def[$k] = $v; // structured rules object
+            }
+            // empty rules => omit key entirely (pass all)
+        } elseif (is_string($v) && trim($v) !== '') {
+            $def[$k] = trim($v); // legacy kplex string form, preserved as-is
         }
     }
     $comment = trim((string)($raw['comment'] ?? ''));

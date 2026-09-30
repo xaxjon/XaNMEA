@@ -139,6 +139,13 @@ final class Config
                 $errors[] = "$label: timestamp must be no|s|ms";
                 continue;
             }
+            foreach (['ifilter', 'ofilter'] as $fk) {
+                $ferr = self::validateFilter($raw[$fk] ?? null);
+                if ($ferr !== null) {
+                    $errors[] = "$label: $fk: $ferr";
+                    continue 2;
+                }
+            }
 
             switch ($type) {
                 case 'serial':
@@ -281,5 +288,59 @@ final class Config
             return null;
         }
         return filter_var($a[$k], FILTER_VALIDATE_BOOLEAN);
+    }
+
+    /**
+     * Validate a filter spec: null/string (legacy kplex form) or the
+     * structured {"rules":[...]} object. Returns an error string or null.
+     * @param mixed $v
+     */
+    public static function validateFilter($v): ?string
+    {
+        if ($v === null || $v === '') {
+            return null;
+        }
+        if (is_string($v)) {
+            // Legacy string form: tokens of +/-/~ separated by ':'
+            foreach (explode(':', $v) as $tok) {
+                $tok = trim($tok);
+                if ($tok === '') {
+                    continue;
+                }
+                if (!in_array($tok[0], ['+', '-', '~'], true)) {
+                    return "bad legacy rule '$tok'";
+                }
+            }
+            return null;
+        }
+        if (!is_array($v) || !isset($v['rules']) || !is_array($v['rules'])) {
+            return 'must be a rules object';
+        }
+        foreach ($v['rules'] as $i => $r) {
+            if (!is_array($r)) {
+                return "rule $i: not an object";
+            }
+            $action = $r['action'] ?? '';
+            if (!in_array($action, ['pass', 'drop'], true)) {
+                return "rule $i: action must be pass|drop";
+            }
+            $class = strtolower((string)($r['class'] ?? 'all'));
+            if ($class !== 'all' && $class !== 'custom' && !isset(Filter::CLASSES[$class])) {
+                return "rule $i: unknown class '$class'";
+            }
+            if ($class === 'custom') {
+                $match = strtoupper(trim((string)($r['match'] ?? '')));
+                if ($match === '' || !preg_match('/^[A-Z0-9*]{1,5}$/', $match)) {
+                    return "rule $i: custom class needs a 1-5 char match pattern (A-Z 0-9 *)";
+                }
+            }
+            if (isset($r['src']) && $r['src'] !== '' && !preg_match('/^[A-Za-z0-9_-]{1,32}$/', (string)$r['src'])) {
+                return "rule $i: bad source interface name";
+            }
+            if (isset($r['limit_s']) && (!is_numeric($r['limit_s']) || (int)$r['limit_s'] < 0)) {
+                return "rule $i: limit_s must be >= 0";
+            }
+        }
+        return null;
     }
 }

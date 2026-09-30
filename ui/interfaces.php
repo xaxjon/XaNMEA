@@ -101,15 +101,23 @@ page_header('Interfaces', 'interfaces');
   <div class="flex">
     <div class="grow">
       <label class="f">Input filter (ifilter)</label>
+      <select class="fmode" id="ifilter-mode">
+        <option value="pass_all">Pass all (default)</option>
+        <option value="rules">Rules — first match wins, no match = drop</option>
+      </select>
       <div class="frules" id="ifilter-rules"></div>
       <button class="btn small" type="button" data-add="ifilter-rules">+ add rule</button>
-      <div class="fstring" id="ifilter-str"></div>
+      <div class="sub" id="ifilter-note"></div>
     </div>
     <div class="grow">
       <label class="f">Output filter (ofilter)</label>
+      <select class="fmode" id="ofilter-mode">
+        <option value="pass_all">Pass all (default)</option>
+        <option value="rules">Rules — first match wins, no match = drop</option>
+      </select>
       <div class="frules" id="ofilter-rules"></div>
       <button class="btn small" type="button" data-add="ofilter-rules">+ add rule</button>
-      <div class="fstring" id="ofilter-str"></div>
+      <div class="sub" id="ofilter-note"></div>
     </div>
   </div>
 
@@ -190,8 +198,8 @@ page_header('Interfaces', 'interfaces');
         '<td>' + esc(it.type) + '</td>' +
         '<td>' + esc(it.direction || '') + '</td>' +
         '<td>' + esc(endpoint(it)) + '</td>' +
-        '<td>' + esc(it.ifilter || '') + '</td>' +
-        '<td>' + esc(it.ofilter || '') + '</td>' +
+        '<td>' + esc(filterSummary(it.ifilter)) + '</td>' +
+        '<td>' + esc(filterSummary(it.ofilter)) + '</td>' +
         '<td>' + (it.enabled === false ? '<span class="badge red">off</span>' : '<span class="badge green">on</span>') + '</td>' +
         (IS_ADMIN ? '<td class="right">' +
           '<button class="btn small" data-edit="' + esc(it.name) + '">Edit</button> ' +
@@ -204,29 +212,42 @@ page_header('Interfaces', 'interfaces');
   }
 
   // ---------------- filter rule builder ----------------
-  // String form (as parsed by src/Filter.php):
-  //   "+GP***:-all:~GPGGA%gps/5"   op + match [+ %src] [+ /period for ~]
-  // Note: for '~' rules the daemon expects %src BEFORE the /period suffix.
+  // Structured rules (OPNsense-style): top-down, first match wins; a
+  // sentence matching NO rule is DROPPED (implicit deny). No rules at
+  // all = Pass All. Legacy kplex strings from older configs are
+  // converted to rules on load (with a note to review before saving).
 
-  function parseFilter(str) {
-    var rows = [];
-    if (!str) return rows;
-    str.split(':').forEach(function (tok) {
+  var FILTER_CLASSES = ['all', 'navigation', 'ais', 'weather', 'alarms', 'custom'];
+
+  function modeSel(container) { return $(container.id.replace('-rules', '-mode')); }
+  function noteEl(container) { return $(container.id.replace('-rules', '-note')); }
+
+  function legacyToRules(str) {
+    var rows = [], toks = String(str || '').split(':');
+    toks.forEach(function (tok, idx) {
       tok = tok.trim();
       if (!tok) return;
-      var op = tok[0];
+      var op = tok[0], rest = tok.slice(1), limit = 0;
       if (op !== '+' && op !== '-' && op !== '~') return;
-      var rest = tok.slice(1), period = '';
       if (op === '~') {
         var sl = rest.lastIndexOf('/');
         if (sl < 0) return;
-        period = rest.slice(sl + 1);
+        limit = parseInt(rest.slice(sl + 1), 10) || 0;
         rest = rest.slice(0, sl);
       }
       var src = '';
       var pc = rest.indexOf('%');
       if (pc >= 0) { src = rest.slice(pc + 1); rest = rest.slice(0, pc); }
-      rows.push({ op: op, match: rest, src: src, period: period });
+      var isAll = rest.toLowerCase() === 'all';
+      // a trailing "-all" is redundant under implicit deny
+      if (op === '-' && isAll && idx === toks.length - 1) return;
+      rows.push({
+        action: op === '-' ? 'drop' : 'pass',
+        cls: isAll ? 'all' : 'custom',
+        match: isAll ? '' : rest.toUpperCase(),
+        src: src,
+        limit_s: op === '~' ? limit : 0
+      });
     });
     return rows;
   }
@@ -234,71 +255,104 @@ page_header('Interfaces', 'interfaces');
   function ruleRow(container, row) {
     var div = document.createElement('div');
     div.className = 'frule';
+    var clsOpts = FILTER_CLASSES.map(function (c) {
+      return '<option value="' + c + '">' + c + '</option>';
+    }).join('');
     div.innerHTML =
-      '<select class="op">' +
-        '<option value="+">+ pass</option>' +
-        '<option value="-">- drop</option>' +
-        '<option value="~">~ limit</option>' +
+      '<select class="faction">' +
+        '<option value="pass">pass</option>' +
+        '<option value="drop">drop</option>' +
       '</select>' +
-      '<input type="text" class="match" maxlength="5" placeholder="GP*** or all">' +
-      '<input type="text" class="src" placeholder="%source (opt)">' +
-      '<input type="number" class="period" min="0" placeholder="/sec" style="display:none">' +
+      '<select class="fcls">' + clsOpts + '</select>' +
+      '<input type="text" class="fmatch" maxlength="5" placeholder="GP***" style="display:none">' +
+      '<input type="text" class="fsrc" placeholder="source (opt)">' +
+      '<input type="number" class="flimit" min="0" placeholder="every N sec" title="Rate limit: pass at most one matching sentence per N seconds (pass rules only)">' +
       '<button class="btn small" type="button" data-up title="Move up">&#8593;</button>' +
       '<button class="btn small" type="button" data-down title="Move down">&#8595;</button>' +
       '<button class="btn small danger" type="button" data-rm title="Remove">&times;</button>';
-    var opSel = div.querySelector('.op');
-    opSel.value = row.op || '+';
-    div.querySelector('.match').value = row.match || '';
-    div.querySelector('.src').value = row.src || '';
-    var per = div.querySelector('.period');
-    per.value = row.period || '';
-    function syncPeriod() { per.style.display = opSel.value === '~' ? '' : 'none'; update(container); }
-    opSel.addEventListener('change', syncPeriod);
-    syncPeriodSilent();
-    function syncPeriodSilent() { per.style.display = opSel.value === '~' ? '' : 'none'; }
-    div.addEventListener('input', function () { update(container); });
-    div.querySelector('[data-rm]').addEventListener('click', function () { div.remove(); update(container); });
+    div.querySelector('.faction').value = row.action || 'pass';
+    div.querySelector('.fcls').value = row.cls || 'navigation';
+    div.querySelector('.fmatch').value = row.match || '';
+    div.querySelector('.fsrc').value = row.src || '';
+    div.querySelector('.flimit').value = row.limit_s || '';
+    function syncMatch() {
+      div.querySelector('.fmatch').style.display =
+        div.querySelector('.fcls').value === 'custom' ? '' : 'none';
+    }
+    div.querySelector('.fcls').addEventListener('change', syncMatch);
+    syncMatch();
+    div.querySelector('[data-rm]').addEventListener('click', function () { div.remove(); });
     div.querySelector('[data-up]').addEventListener('click', function () {
       if (div.previousElementSibling) container.insertBefore(div, div.previousElementSibling);
-      update(container);
     });
     div.querySelector('[data-down]').addEventListener('click', function () {
       if (div.nextElementSibling) container.insertBefore(div.nextElementSibling, div);
-      update(container);
     });
     container.appendChild(div);
   }
 
-  function assemble(container) {
-    var toks = [];
-    container.querySelectorAll('.frule').forEach(function (div) {
-      var op = div.querySelector('.op').value;
-      var match = div.querySelector('.match').value.trim();
-      var src = div.querySelector('.src').value.trim();
-      var period = div.querySelector('.period').value.trim();
-      if (!match) return;
-      var tok = op + match;
-      if (src) tok += '%' + src;
-      if (op === '~') tok += '/' + (period || '1');
-      toks.push(tok);
-    });
-    return toks.join(':');
+  function syncMode(container) {
+    var rules = modeSel(container).value === 'rules';
+    container.style.display = rules ? '' : 'none';
+    document.querySelector('[data-add="' + container.id + '"]').style.display = rules ? '' : 'none';
   }
 
-  function update(container) {
-    var strEl = $(container.id.replace('-rules', '-str'));
-    if (strEl) strEl.textContent = assemble(container);
-  }
-
-  function setRules(container, str) {
+  function setFilter(container, spec) {
     container.innerHTML = '';
-    parseFilter(str).forEach(function (row) { ruleRow(container, row); });
-    update(container);
+    noteEl(container).textContent = '';
+    var rules = [];
+    if (typeof spec === 'string' && spec.trim() !== '') {
+      rules = legacyToRules(spec);
+      noteEl(container).textContent = 'Converted from legacy filter "' + spec + '" - review, then Save.';
+    } else if (spec && Array.isArray(spec.rules)) {
+      rules = spec.rules.map(function (r) {
+        return {
+          action: r.action || 'pass',
+          cls: r['class'] || 'all',
+          match: r.match || '',
+          src: r.src || '',
+          limit_s: r.limit_s || 0
+        };
+      });
+    }
+    modeSel(container).value = rules.length ? 'rules' : 'pass_all';
+    rules.forEach(function (row) { ruleRow(container, row); });
+    syncMode(container);
+  }
+
+  function gatherFilter(container) {
+    if (modeSel(container).value !== 'rules') return null; // pass all
+    var rules = [];
+    container.querySelectorAll('.frule').forEach(function (div) {
+      var cls = div.querySelector('.fcls').value;
+      var match = div.querySelector('.fmatch').value.trim().toUpperCase();
+      if (cls === 'custom' && !match) return; // incomplete custom rule: skip
+      var r = { action: div.querySelector('.faction').value, 'class': cls };
+      if (cls === 'custom') r.match = match;
+      var src = div.querySelector('.fsrc').value.trim();
+      if (src) r.src = src;
+      var lim = parseInt(div.querySelector('.flimit').value, 10);
+      if (r.action === 'pass' && lim > 0) r.limit_s = lim;
+      rules.push(r);
+    });
+    return rules.length ? { rules: rules } : null;
+  }
+
+  function filterSummary(v) {
+    if (v === null || v === undefined || v === '') return 'Pass All';
+    if (typeof v === 'string') return 'Legacy rules';
+    if (v && Array.isArray(v.rules)) return v.rules.length ? 'Rules (' + v.rules.length + ')' : 'Pass All';
+    return 'Rules';
   }
 
   document.querySelectorAll('[data-add]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      ruleRow($(btn.getAttribute('data-add')), { op: '+', match: '', src: '', period: '' });
+      ruleRow($(btn.getAttribute('data-add')), { action: 'pass', cls: 'navigation', match: '', src: '', limit_s: 0 });
+    });
+  });
+  document.querySelectorAll('.fmode').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      syncMode($(sel.id.replace('-mode', '-rules')));
     });
   });
 
@@ -346,8 +400,8 @@ page_header('Interfaces', 'interfaces');
     $('f-srctag').value = 'no'; $('f-timestamp').value = 'no';
     $('f-qsize').value = '0';
     $('f-loopback').checked = false; $('f-optional').checked = true;
-    setRules($('ifilter-rules'), '');
-    setRules($('ofilter-rules'), '');
+    setFilter($('ifilter-rules'), null);
+    setFilter($('ofilter-rules'), null);
     $('f-msg').textContent = '';
     syncType();
   }
@@ -387,8 +441,8 @@ page_header('Interfaces', 'interfaces');
     $('f-qsize').value = it.qsize || 0;
     $('f-loopback').checked = !!it.loopback;
     $('f-optional').checked = it.optional !== false;
-    setRules($('ifilter-rules'), it.ifilter || '');
-    setRules($('ofilter-rules'), it.ofilter || '');
+    setFilter($('ifilter-rules'), it.ifilter);
+    setFilter($('ofilter-rules'), it.ofilter);
     syncType();
     $('formcard').scrollIntoView({ behavior: 'smooth' });
   }
@@ -406,8 +460,8 @@ page_header('Interfaces', 'interfaces');
       qsize: parseInt($('f-qsize').value, 10) || 0,
       srctag: $('f-srctag').value,
       timestamp: $('f-timestamp').value,
-      ifilter: assemble($('ifilter-rules')),
-      ofilter: assemble($('ofilter-rules'))
+      ifilter: gatherFilter($('ifilter-rules')),
+      ofilter: gatherFilter($('ofilter-rules'))
     };
     if ($('f-checksum').value !== '') def.checksum = $('f-checksum').value === '1';
     if ($('f-strict').value !== '') def.strict = $('f-strict').value === '1';

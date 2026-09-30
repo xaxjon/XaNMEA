@@ -43,7 +43,7 @@ kplex is the reference implementation for the **routing** side. Features we shou
 | file & pty interfaces | v2 (useful for OpenCPN-style virtual ports and logging) |
 | gofree (Navico discovery) | v2 — niche, easy add-on: listen 239.2.1.1:2052, connect to announced TCP service |
 | direction=in/out/both | Matched |
-| ifilter / ofilter (`+GP***:-all:~GPGGA/5`) | Matched, with a **UI filter builder** instead of raw syntax |
+| ifilter / ofilter (`+GP***:-all:~GPGGA/5`) | **Superseded** by OPNsense-style structured rules (pass/drop × class, implicit deny); legacy kplex strings still accepted for backward compatibility |
 | failover between sources | Matched (v1.1 acceptable) |
 | TAG blocks (srctag, timestamp) | Matched — checkbox per output |
 | checksum / strict parsing options | Matched — global + per-interface override |
@@ -169,7 +169,9 @@ interfaces
   config_json        -- type-specific: {device,baud} | {port,address} | {address,port,mode}
   options_json       -- {checksum, strict, optional, qsize, srctag, timestamp,
                         persist, retry, keepalive, coalesce, loopback}
-  ifilter_json       -- ordered rule list [{op:+|-|~, match:"GP***", src?:name, period?:s}]
+  ifilter_json       -- {"rules":[{action:pass|drop, class:all|navigation|ais|weather|alarms|custom,
+                         match?:"GP***", src?:iface, limit_s?:N}]}  (absent = pass all;
+                         first match wins, no match = drop; legacy kplex string also accepted)
   ofilter_json
 failovers
   id, match("GP***"), priorities_json [{interface, delay_s}, ...]

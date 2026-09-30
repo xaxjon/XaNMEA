@@ -18,6 +18,15 @@ command -v php >/dev/null || { echo "ERROR: PHP CLI not installed (apt install p
 need_php_ext sockets
 need_php_ext pcntl
 
+# Lint gate: never install (or restart the daemon onto) code that does not
+# parse. A syntax error must fail the install, not the running daemon.
+echo "==> linting PHP files"
+LINT_FAIL=0
+while IFS= read -r f; do
+  php -l "$f" >/dev/null 2>&1 || { echo "ERROR: syntax error in $f"; php -l "$f"; LINT_FAIL=1; }
+done < <(find "$SRC_DIR/src" "$SRC_DIR/ui" "$SRC_DIR/bin" "$SRC_DIR/tools" -type f \( -name '*.php' -o -name 'xanmead' \))
+[ "$LINT_FAIL" -eq 0 ] || { echo "ERROR: lint failures, aborting install (daemon untouched)"; exit 1; }
+
 # Serial config relies on stty; uutils coreutils (Ubuntu 25.10) ships an
 # stty that cannot set baud rates. The daemon falls back to busybox stty,
 # so warn early if neither a capable stty nor busybox is present.

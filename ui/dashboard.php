@@ -207,7 +207,9 @@ page_header('Dashboard', 'dashboard');
     document.getElementById('pos-meta').textContent =
       (o.utc ? 'UTC ' + o.utc + ' ' : '') + (o.date || '') +
       (o.altitude_m !== undefined ? '  alt ' + fnum(o.altitude_m, 1) + ' m' : '') +
-      (o.rot !== undefined ? '  ROT ' + fnum(o.rot, 1) + '\u00B0/min' : '');
+      (o.rot !== undefined ? '  ROT ' + fnum(o.rot, 1) + '\u00B0/min' : '') +
+      (o.log_total_nm !== undefined ? '  log ' + fnum(o.log_total_nm, 1) + ' nm' : '') +
+      (o.log_trip_nm !== undefined ? '  trip ' + fnum(o.log_trip_nm, 2) + ' nm' : '');
     sog(o.sog === undefined ? null : o.sog);
     stw(o.stw === undefined ? null : o.stw);
     depth(o.depth_m === undefined ? null : o.depth_m);

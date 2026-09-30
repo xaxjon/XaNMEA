@@ -20,6 +20,8 @@ final class StateStore
     public array $weather = ['latest' => [], 'wind_history' => [], 'pressure_history' => []];
     /** @var array<string,array> "TALKERTYPE" => {talker,type,fields,ts,rate} */
     public array $misc = [];
+    /** @var array<string,array> alarm id => {id,talker,active,acknowledged,description,ts} */
+    public array $alarms = [];
     /** @var array<string,array> sentence registry */
     public array $sentences = [];
 
@@ -198,6 +200,36 @@ final class StateStore
         $this->emit(['misc' => [$key => ['fields' => $fields, 'ts' => $now]]]);
     }
 
+    /**
+     * Update one alarm entry (from ALR). Cleared+acknowledged alarms are
+     * removed; the delta carries null for removals.
+     */
+    public function updateAlarm(string $key, string $talker, bool $active, bool $acknowledged, string $description): void
+    {
+        $now = microtime(true);
+        if (!$active && $acknowledged) {
+            if (isset($this->alarms[$key])) {
+                unset($this->alarms[$key]);
+                $this->emit(['alarms' => [$key => null]]);
+            }
+            return;
+        }
+        $prev = $this->alarms[$key] ?? null;
+        $entry = [
+            'id' => $key,
+            'talker' => $talker,
+            'active' => $active,
+            'acknowledged' => $acknowledged,
+            'description' => $description,
+            'ts' => $now,
+            'first_seen' => $prev['first_seen'] ?? $now,
+        ];
+        if ($prev !== $entry) {
+            $this->alarms[$key] = $entry;
+            $this->emit(['alarms' => [$key => $entry]]);
+        }
+    }
+
     /** Sentence registry: track every type seen + decode status. */
     public function registerSentence(string $talker, string $type, string $status): void
     {
@@ -272,7 +304,7 @@ final class StateStore
     public static function mergeDelta(array $a, array $b): array
     {
         foreach ($b as $section => $val) {
-            if (in_array($section, ['ais', 'misc'], true) && isset($a[$section]) && is_array($val)) {
+            if (in_array($section, ['ais', 'misc', 'alarms'], true) && isset($a[$section]) && is_array($val)) {
                 foreach ($val as $k => $v) {
                     $a[$section][$k] = $v === null ? null : array_merge($a[$section][$k] ?? [], $v);
                 }
@@ -293,10 +325,11 @@ final class StateStore
                 'ais' => $this->ais,
                 'weather' => $this->weather,
                 'misc' => $this->misc,
+                'alarms' => $this->alarms,
                 'sentences' => $this->sentences,
             ];
         }
-        if (!in_array($section, ['ownship', 'ais', 'weather', 'misc', 'sentences'], true)) {
+        if (!in_array($section, ['ownship', 'ais', 'weather', 'misc', 'alarms', 'sentences'], true)) {
             return ['error' => 'unknown section'];
         }
         return [$section => $this->{$section} ?? null];

@@ -49,10 +49,15 @@ final class Decoder
             case 'DBT': $ownship = $this->dbt($s); break;
             case 'DPT': $ownship = $this->dpt($s); break;
             case 'VHW': $ownship = $this->vhw($s); break;
+            case 'VBW': $ownship = $this->vbw($s); break;
+            case 'VLW': $ownship = $this->vlw($s); break;
             case 'XTE': $ownship = $this->xte($s); break;
             case 'APB': $ownship = $this->apb($s); break;
             case 'BWC': case 'BWR': $ownship = $this->bwc($s); break;
             case 'RMB': $ownship = $this->rmb($s); break;
+
+            case 'ALR': $this->alr($s); break;
+            case 'HBT': $this->hbt($s); break;
 
             case 'MWV': $weather = $this->mwv($s); break;
             case 'MWD': $weather = $this->mwd($s); break;
@@ -405,9 +410,86 @@ final class Decoder
         return $out ?: null;
     }
 
-    private function xte(Sentence $s): ?array
+    /**
+     * VBW: dual ground/water speed (Doppler logs).
+     * $--VBW,longWater,transWater,stWater,longGround,transGround,stGround,
+     *        sternWater,stSternWater,sternGround,stSternGround
+     * Validity flags are honoured: invalid values are not published, and the
+     * valid flags themselves are exposed so the UI can show "no bottom track".
+     */
+    private function vbw(Sentence $s): ?array
     {
         $f = $s->fields;
+        $out = [];
+        $waterOk = self::f($f, 2) === 'A';
+        $groundOk = self::f($f, 5) === 'A';
+        $out['stw_valid'] = $waterOk;
+        $out['sog_ground_valid'] = $groundOk;
+        $stw = self::num($f, 0);
+        if ($waterOk && $stw !== null) {
+            $out['stw'] = $stw;
+        }
+        $sog = self::num($f, 3);
+        if ($groundOk && $sog !== null) {
+            $out['sog_ground'] = $sog;
+        }
+        return $out;
+    }
+
+    /** VLW: distance log. $--VLW,total,N,trip,N[,total2,N,trip2,N] */
+    private function vlw(Sentence $s): ?array
+    {
+        $f = $s->fields;
+        $out = [];
+        $total = self::num($f, 0);
+        if ($total !== null) {
+            $out['log_total_nm'] = $total;
+        }
+        $trip = self::num($f, 2);
+        if ($trip !== null) {
+            $out['log_trip_nm'] = $trip;
+        }
+        return $out ?: null;
+    }
+
+    /**
+     * ALR: alarm state report. $--ALR,time,id,condition,ack,description
+     * condition: A=active V=cleared; ack: A=acknowledged V=not acknowledged.
+     * Keyed by talker+alarm id; cleared+acknowledged alarms are dropped.
+     */
+    private function alr(Sentence $s): void
+    {
+        $f = $s->fields;
+        $id = self::f($f, 1) ?? '?';
+        $this->state->updateAlarm(
+            $s->talker . ':' . $id,
+            $s->talker,
+            self::f($f, 2) === 'A',
+            self::f($f, 3) === 'A',
+            (string)(self::f($f, 4) ?? '')
+        );
+    }
+
+    /** HBT: heartbeat supervision. $--HBT,interval,status,count */
+    private function hbt(Sentence $s): void
+    {
+        $f = $s->fields;
+        $fields = [];
+        $interval = self::num($f, 0);
+        if ($interval !== null) {
+            $fields['interval_s'] = $interval;
+        }
+        if (self::f($f, 1) !== null) {
+            $fields['status'] = self::f($f, 1);
+        }
+        $count = self::num($f, 2);
+        if ($count !== null) {
+            $fields['count'] = (int)$count;
+        }
+        if ($fields) {
+            $this->state->updateMisc('HBT.' . $s->talker, $s->talker, 'HBT', $fields);
+        }
+    }
         $dist = self::num($f, 2);
         if ($dist === null) {
             return null;

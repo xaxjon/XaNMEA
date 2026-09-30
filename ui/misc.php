@@ -12,6 +12,8 @@ page_header('Misc', 'misc');
 ?>
 <h1>Misc decoded sentences</h1>
 
+<div id="alarms"></div>
+
 <div class="grid cols-3" id="cards"></div>
 
 <div class="card mt">
@@ -29,7 +31,7 @@ page_header('Misc', 'misc');
 (function () {
   'use strict';
 
-  var misc = {}, sentences = {};
+  var misc = {}, sentences = {}, alarms = {};
 
   function esc(s) {
     return String(s === null || s === undefined ? '' : s)
@@ -95,8 +97,25 @@ page_header('Misc', 'misc');
       '<tr><td colspan="7" class="dim">Nothing seen yet.</td></tr>';
   }
 
-  function render() { renderCards(); renderRegistry(); }
+  function render() { renderCards(); renderRegistry(); renderAlarms(); }
   setInterval(renderRegistry, 5000); // age columns tick over
+
+  function renderAlarms() {
+    var keys = Object.keys(alarms).sort();
+    var html = '';
+    keys.forEach(function (k) {
+      var a = alarms[k];
+      // active+unacknowledged = red; anything else still tracked = amber
+      var cls = (a.active && !a.acknowledged) ? 'red' : 'amber';
+      var state = a.active ? 'ACTIVE' : 'cleared';
+      if (a.acknowledged) state += ' (ack)';
+      html += '<div class="card alarm ' + cls + '">' +
+        '<h2>' + esc(a.id) + ' <span class="badge ' + cls + '">' + state + '</span></h2>' +
+        '<div>' + esc(a.description || '(no description)') + '</div>' +
+        '<div class="sub">' + esc(a.talker) + ' &middot; ' + ago(a.ts) + '</div></div>';
+    });
+    document.getElementById('alarms').innerHTML = html;
+  }
 
   async function boot() {
     try {
@@ -105,6 +124,7 @@ page_header('Misc', 'misc');
       if (j.ok && j.state) {
         misc = j.state.misc || {};
         sentences = j.state.sentences || {};
+        alarms = j.state.alarms || {};
       }
     } catch (e) { }
     render();
@@ -119,6 +139,13 @@ page_header('Misc', 'misc');
         Object.keys(msg.d.misc).forEach(function (k) {
           if (msg.d.misc[k] === null) { delete misc[k]; return; }
           misc[k] = Object.assign(misc[k] || {}, msg.d.misc[k]);
+        });
+        dirty = true;
+      }
+      if (msg.d.alarms) {
+        Object.keys(msg.d.alarms).forEach(function (k) {
+          if (msg.d.alarms[k] === null) { delete alarms[k]; return; }
+          alarms[k] = Object.assign(alarms[k] || {}, msg.d.alarms[k]);
         });
         dirty = true;
       }

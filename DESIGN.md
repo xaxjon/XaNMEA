@@ -127,10 +127,11 @@ A decoder module inside the daemon, fed from pipeline step 8. Pure PHP, no depen
 
 | Domain | Sentences |
 |---|---|
-| Position/nav | GGA, GLL, RMC, VTG, GSA, GSV, HDG, HDT, HDM, ROT, DBT, DPT, VHW, XTE, APB, BWC, BWR, RMB |
+| Position/nav | GGA, GNS, GLL, RMC, VTG, GSA, GSV, ZDA, HDG, HDT, HDM, ROT, DBT, DPT, VHW, VBW (dual ground/water speed), VLW (distance log), XTE, APB, BWC, BWR, RMB |
 | AIS | VDM, VDO — message types 1, 2, 3 (Class A position), 5 (Class A static), 18 (Class B position), 24 (Class B static), 19, 21 (AtoN), 27 optional |
 | Weather | MWV, MWD, VWR, VWT (wind), MDA (met composite), MTW (water temp), XDR (air temp / pressure / humidity transducers) |
-| Engine/misc | RPM, XDR (voltage, temperature, tank), known proprietary (`$PCDIN` shown raw-decoded), plus a generic fallback for anything else |
+| Engine/misc | RPM, XDR (voltage, temperature, tank), HBT (device heartbeat), known proprietary (`$PCDIN` shown raw-decoded), plus a generic fallback for anything else |
+| Alarms | ALR — decoded into an `alarms` state section (active/acknowledged), shown on the Misc page |
 
 **AIS decoder specifics** — the chunky part (~600–900 lines):
 - 6-bit ASCII armour decoding, bit-field extraction per message type

@@ -490,6 +490,10 @@ final class Decoder
             $this->state->updateMisc('HBT.' . $s->talker, $s->talker, 'HBT', $fields);
         }
     }
+
+    private function xte(Sentence $s): ?array
+    {
+        $f = $s->fields;
         $dist = self::num($f, 2);
         if ($dist === null) {
             return null;

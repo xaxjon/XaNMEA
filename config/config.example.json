@@ -50,6 +50,15 @@
       "direction": "in",
       "device": "/dev/ttyUSB0",
       "baud": 4800
+    },
+    {
+      "name": "gps-synthetic",
+      "enabled": false,
+      "type": "synthetic",
+      "direction": "in",
+      "source": "gps-serial",
+      "max_age": 5,
+      "comment": "GPGGA and GPRMC at 1 Hz from GNS/GLL, ZDA and VTG"
     }
   ],
   "failovers": [],

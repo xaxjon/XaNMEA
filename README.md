@@ -23,6 +23,18 @@ php tools/simulator.php 4010 &     # synthetic NMEA feed for testing
 Point a browser at the UI host; create the admin user on first visit. Connect
 OpenCPN/iNavX to TCP port 10110.
 
+## Synthetic GGA/RMC output
+
+Add a **synthetic (GGA/RMC)** interface on the Interfaces page and select the
+input that carries GNS or GLL positions, ZDA date/time, and VTG course/speed.
+The daemon generates GPGGA and GPRMC with valid checksums once per second.
+Generation pauses when the position is older than the configured maximum age.
+
+The synthetic interface is an internal input, so existing outputs and filters
+route it like any other source. For a synthetic-only TCP or UDP stream, add a
+dedicated output with one `pass all` output-filter rule whose source is the
+synthetic interface name.
+
 ## Layout
 
 - `bin/xanmead` — daemon entry point

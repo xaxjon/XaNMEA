@@ -18,6 +18,8 @@ final class Router
     private $tailHook = null;
     /** @var callable|null decode hook: fn(Sentence): void */
     private $decodeHook = null;
+    /** @var callable|null synthetic source hook: fn(Sentence): void */
+    private $syntheticHook = null;
 
     // Failover state: ruleIndex => ifaceName(lower) => last-seen ts of matching sentence
     private array $foLastSeen = [];
@@ -30,6 +32,7 @@ final class Router
 
     public function setTailHook(callable $cb): void { $this->tailHook = $cb; }
     public function setDecodeHook(callable $cb): void { $this->decodeHook = $cb; }
+    public function setSyntheticHook(callable $cb): void { $this->syntheticHook = $cb; }
 
     public function setFailovers(array $failovers): void
     {
@@ -90,6 +93,13 @@ final class Router
                 ($this->decodeHook)($s);
             } catch (\Throwable $e) {
                 // decoding must never affect routing
+            }
+        }
+        if ($this->syntheticHook !== null) {
+            try {
+                ($this->syntheticHook)($s);
+            } catch (\Throwable $e) {
+                // synthesis must never affect routing
             }
         }
     }

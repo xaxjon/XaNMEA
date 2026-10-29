@@ -107,6 +107,18 @@ final class Sentence
         return $s;
     }
 
+    /** Build a standard sentence with a fresh checksum. */
+    public static function build(string $talker, string $type, array $fields): self
+    {
+        $body = $talker . $type . ',' . implode(',', $fields);
+        $raw = '$' . $body . '*' . strtoupper(str_pad(dechex(self::checksum($body)), 2, '0', STR_PAD_LEFT));
+        $s = self::parse($raw);
+        if ($s === null) {
+            throw new \InvalidArgumentException('cannot build NMEA sentence');
+        }
+        return $s;
+    }
+
     /** XOR checksum of all chars between $/! and *. */
     public static function checksum(string $body): int
     {

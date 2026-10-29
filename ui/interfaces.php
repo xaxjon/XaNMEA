@@ -41,6 +41,7 @@ page_header('Interfaces', 'interfaces');
         <option value="tcp_server">tcp_server</option>
         <option value="tcp_client">tcp_client</option>
         <option value="udp">udp</option>
+        <option value="synthetic">synthetic (GGA/RMC)</option>
       </select>
       <label class="f" for="f-direction">Direction</label>
       <select id="f-direction">
@@ -94,6 +95,21 @@ page_header('Interfaces', 'interfaces');
         <label class="f" for="f-udp-port">Port</label>
         <input type="number" id="f-udp-port" min="1" max="65535" value="10110">
         <label class="f"><input type="checkbox" id="f-udp-coalesce"> Coalesce output datagrams</label>
+      </div>
+      <!-- synthetic -->
+      <div class="typed" data-type="synthetic">
+        <label class="f" for="f-syn-source">Source input interface</label>
+        <input type="text" id="f-syn-source" list="synthetic-sources" placeholder="gps-serial">
+        <datalist id="synthetic-sources">
+          <?php foreach ($ifaces as $sourceIf): ?>
+            <?php if (($sourceIf['direction'] ?? 'in') !== 'out' && ($sourceIf['type'] ?? '') !== 'synthetic'): ?>
+            <option value="<?= h((string)$sourceIf['name']) ?>">
+            <?php endif; ?>
+          <?php endforeach; ?>
+        </datalist>
+        <div class="hint">Builds GPGGA and GPRMC from GNS/GLL, ZDA, and VTG at 1 Hz.</div>
+        <label class="f" for="f-syn-max-age">Maximum data age (seconds)</label>
+        <input type="number" id="f-syn-max-age" min="1" max="300" value="5">
       </div>
     </div>
   </div>
@@ -186,6 +202,7 @@ page_header('Interfaces', 'interfaces');
 
   function endpoint(it) {
     if (it.type === 'serial') return (it.device || '?') + ' @ ' + (it.baud || '?');
+    if (it.type === 'synthetic') return 'GGA/RMC @ 1 Hz from ' + (it.source || '?');
     return (it.address || '') + ':' + (it.port || '');
   }
 
@@ -364,6 +381,8 @@ page_header('Interfaces', 'interfaces');
       el.style.display = el.getAttribute('data-type') === t ? '' : 'none';
     });
     if (t === 'tcp_server' && $('f-direction').value === 'in') $('f-direction').value = 'both';
+    if (t === 'synthetic') $('f-direction').value = 'in';
+    $('f-direction').disabled = t === 'synthetic';
     udpHint();
   }
 
@@ -396,6 +415,7 @@ page_header('Interfaces', 'interfaces');
     $('f-tc-nodelay').checked = true; $('f-tc-keepalive').checked = true;
     $('f-tc-preamble').value = '';
     $('f-udp-addr').value = ''; $('f-udp-port').value = '10110'; $('f-udp-coalesce').checked = false;
+    $('f-syn-source').value = ''; $('f-syn-max-age').value = '5';
     $('f-checksum').value = ''; $('f-strict').value = '';
     $('f-srctag').value = 'no'; $('f-timestamp').value = 'no';
     $('f-qsize').value = '0';
@@ -433,6 +453,9 @@ page_header('Interfaces', 'interfaces');
       $('f-udp-addr').value = it.address || '';
       $('f-udp-port').value = it.port || 10110;
       $('f-udp-coalesce').checked = !!it.coalesce;
+    } else if (it.type === 'synthetic') {
+      $('f-syn-source').value = it.source || '';
+      $('f-syn-max-age').value = it.max_age || 5;
     }
     $('f-checksum').value = it.checksum === undefined || it.checksum === null ? '' : (it.checksum ? '1' : '0');
     $('f-strict').value = it.strict === undefined || it.strict === null ? '' : (it.strict ? '1' : '0');
@@ -483,6 +506,9 @@ page_header('Interfaces', 'interfaces');
       def.address = $('f-udp-addr').value.trim();
       def.port = parseInt($('f-udp-port').value, 10);
       def.coalesce = $('f-udp-coalesce').checked;
+    } else if (t === 'synthetic') {
+      def.source = $('f-syn-source').value.trim();
+      def.max_age = parseInt($('f-syn-max-age').value, 10) || 5;
     }
     return def;
   }

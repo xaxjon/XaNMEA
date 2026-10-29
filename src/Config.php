@@ -18,7 +18,7 @@ final class Config
     /** @var array<int,array{username:string,password_hash:string,role:string}> */
     public array $users = [];
 
-    public const TYPES = ['serial', 'tcp_server', 'tcp_client', 'udp'];
+    public const TYPES = ['serial', 'tcp_server', 'tcp_client', 'udp', 'synthetic'];
     public const DIRECTIONS = ['in', 'out', 'both'];
     public const BAUDS = [4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800];
 
@@ -114,6 +114,10 @@ final class Config
             if ($type === 'udp' && $direction === 'both') {
                 // legal but flagged in UI; allowed here
             }
+            if ($type === 'synthetic' && $direction !== 'in') {
+                $errors[] = "$label: synthetic direction must be in";
+                continue;
+            }
 
             $if = [
                 'name' => $name,
@@ -208,9 +212,40 @@ final class Config
                     $if['address'] = $addr !== '' ? $addr : '0.0.0.0';
                     $if['coalesce'] = $this->bool($raw, 'coalesce', false);
                     break;
+
+                case 'synthetic':
+                    $source = trim((string)($raw['source'] ?? ''));
+                    if (!preg_match('/^[A-Za-z0-9_-]{1,32}$/', $source)) {
+                        $errors[] = "$label: source input interface is required";
+                        continue 2;
+                    }
+                    $maxAge = $this->int($raw, 'max_age', 5);
+                    if ($maxAge < 1 || $maxAge > 300) {
+                        $errors[] = "$label: max_age must be 1-300 seconds";
+                        continue 2;
+                    }
+                    $if['source'] = $source;
+                    $if['max_age'] = $maxAge;
+                    break;
             }
 
             $this->interfaces[] = $if;
+        }
+
+        $byName = [];
+        foreach ($this->interfaces as $if) {
+            $byName[strtolower($if['name'])] = $if;
+        }
+        foreach ($this->interfaces as $if) {
+            if ($if['type'] !== 'synthetic') {
+                continue;
+            }
+            $source = $byName[strtolower($if['source'])] ?? null;
+            if ($source === null) {
+                $errors[] = "interface '{$if['name']}': unknown source '{$if['source']}'";
+            } elseif ($source['name'] === $if['name'] || $source['type'] === 'synthetic' || $source['direction'] === 'out') {
+                $errors[] = "interface '{$if['name']}': source must be a non-synthetic input interface";
+            }
         }
 
         // ---- failovers

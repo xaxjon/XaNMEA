@@ -7,6 +7,7 @@ use XaNmea\Control\ControlServer;
 use XaNmea\Decode\Decoder;
 use XaNmea\Io\Iface;
 use XaNmea\Io\SerialIface;
+use XaNmea\Io\SyntheticIface;
 use XaNmea\Io\TcpClientIface;
 use XaNmea\Io\TcpServerIface;
 use XaNmea\Io\UdpIface;
@@ -75,6 +76,7 @@ final class Daemon
         $this->control = new ControlServer($d['control_socket'], $this->log, $d['stream_qsize']);
 
         $this->router->setDecodeHook(fn(Sentence $s) => $this->decoder->feed($s));
+        $this->router->setSyntheticHook(fn(Sentence $s) => $this->feedSynthetic($s));
         $this->router->setTailHook(function (Sentence $s, array $dst) {
             $this->control->broadcastTail($s->srcName, $dst, $s->raw, $s->checksumOk || $s->checksum === null);
         });
@@ -349,6 +351,20 @@ final class Daemon
         // a changed default rebuilds the affected interfaces in applyConfig().
     }
 
+    private function feedSynthetic(Sentence $s): void
+    {
+        foreach ($this->ifaces as $if) {
+            if (!$if instanceof SyntheticIface) {
+                continue;
+            }
+            try {
+                $if->observe($s);
+            } catch (\Throwable $e) {
+                $if->noteError('synthesis: ' . $e->getMessage());
+            }
+        }
+    }
+
     private function defHash(array $def): string
     {
         return md5(json_encode($def) ?: '');
@@ -358,6 +374,7 @@ final class Daemon
     {
         return match ($def['type']) {
             'serial' => new SerialIface($def, $this->log),
+            'synthetic' => new SyntheticIface($def, $this->log),
             'tcp_server' => new TcpServerIface($def, $this->log),
             'tcp_client' => new TcpClientIface($def, $this->log),
             'udp' => new UdpIface($def, $this->log),

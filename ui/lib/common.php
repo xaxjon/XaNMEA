@@ -314,7 +314,7 @@ JS;
 // ---------------------------------------------------------------- validation
 // Mirrors the daemon's rules in src/Config.php. Returns [def|null, errors[]].
 
-const XAN_TYPES = ['serial', 'tcp_server', 'tcp_client', 'udp'];
+const XAN_TYPES = ['serial', 'tcp_server', 'tcp_client', 'udp', 'synthetic'];
 const XAN_DIRECTIONS = ['in', 'out', 'both'];
 const XAN_BAUDS = [4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800];
 
@@ -383,6 +383,9 @@ function xan_validate_interface(array $raw, array $takenNames = []): array
     $direction = (string)($raw['direction'] ?? ($type === 'tcp_server' ? 'both' : 'in'));
     if (!in_array($direction, XAN_DIRECTIONS, true)) {
         $errors[] = 'direction must be in|out|both';
+    }
+    if ($type === 'synthetic' && $direction !== 'in') {
+        $errors[] = 'synthetic direction must be in';
     }
     if ($errors) {
         return [null, $errors];
@@ -491,6 +494,19 @@ function xan_validate_interface(array $raw, array $takenNames = []): array
             $def['port'] = $port;
             $def['address'] = $addr !== '' ? $addr : '0.0.0.0';
             $def['coalesce'] = !empty($raw['coalesce']);
+            break;
+
+        case 'synthetic':
+            $source = trim((string)($raw['source'] ?? ''));
+            if (!preg_match('/^[A-Za-z0-9_-]{1,32}$/', $source)) {
+                $errors[] = 'source input interface is required';
+            }
+            $maxAge = (int)($raw['max_age'] ?? 5);
+            if ($maxAge < 1 || $maxAge > 300) {
+                $errors[] = 'max_age must be 1-300 seconds';
+            }
+            $def['source'] = $source;
+            $def['max_age'] = $maxAge;
             break;
     }
 

@@ -106,7 +106,11 @@ final class Config
                 $errors[] = "$label: type must be one of " . implode(',', self::TYPES);
                 continue;
             }
-            $direction = $raw['direction'] ?? ($type === 'tcp_server' ? 'both' : 'in');
+            $direction = $raw['direction'] ?? match ($type) {
+                'tcp_server' => 'both',
+                'synthetic' => 'out',
+                default => 'in',
+            };
             if (!in_array($direction, self::DIRECTIONS, true)) {
                 $errors[] = "$label: direction must be in|out|both";
                 continue;
@@ -114,8 +118,8 @@ final class Config
             if ($type === 'udp' && $direction === 'both') {
                 // legal but flagged in UI; allowed here
             }
-            if ($type === 'synthetic' && $direction !== 'in') {
-                $errors[] = "$label: synthetic direction must be in";
+            if ($type === 'synthetic' && $direction !== 'out') {
+                $errors[] = "$label: synthetic direction must be out";
                 continue;
             }
 
@@ -219,12 +223,25 @@ final class Config
                         $errors[] = "$label: source input interface is required";
                         continue 2;
                     }
+                    $protocol = strtolower($this->str($raw, 'protocol', 'tcp'));
+                    if (!in_array($protocol, ['tcp', 'udp'], true)) {
+                        $errors[] = "$label: protocol must be tcp|udp";
+                        continue 2;
+                    }
+                    $port = $this->int($raw, 'port', 10110);
+                    if ($port < 1 || $port > 65535) {
+                        $errors[] = "$label: invalid port";
+                        continue 2;
+                    }
                     $maxAge = $this->int($raw, 'max_age', 5);
                     if ($maxAge < 1 || $maxAge > 300) {
                         $errors[] = "$label: max_age must be 1-300 seconds";
                         continue 2;
                     }
                     $if['source'] = $source;
+                    $if['protocol'] = $protocol;
+                    $if['address'] = $this->str($raw, 'address', $protocol === 'tcp' ? '0.0.0.0' : '255.255.255.255');
+                    $if['port'] = $port;
                     $if['max_age'] = $maxAge;
                     break;
             }

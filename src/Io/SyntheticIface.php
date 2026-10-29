@@ -7,7 +7,7 @@ use XaNmea\Logger;
 use XaNmea\Sentence;
 
 /**
- * Internal 1 Hz GPS source derived from one selected input interface.
+ * Direct TCP/UDP 1 Hz GGA/RMC output derived from one selected input.
  * GNS/GLL provide position and fix state, ZDA provides UTC date/time,
  * and VTG provides ground speed and course.
  */
@@ -17,6 +17,8 @@ final class SyntheticIface extends Iface
 
     private string $source;
     private int $maxAge;
+    private string $protocol;
+    private Iface $transport;
     private array $position = [];
     private array $gns = [];
     private array $gll = [];
@@ -28,20 +30,53 @@ final class SyntheticIface extends Iface
         parent::__construct($def, $log);
         $this->source = $def['source'];
         $this->maxAge = $def['max_age'];
+        $this->protocol = $def['protocol'];
+        $transportDef = $def;
+        $transportDef['type'] = $this->protocol === 'tcp' ? 'tcp_server' : 'udp';
+        $transportDef['coalesce'] = false;
+        $this->transport = $this->protocol === 'tcp'
+            ? new TcpServerIface($transportDef, $log)
+            : new UdpIface($transportDef, $log);
     }
 
     public function open(): void
     {
-        $this->state = 'up';
-        $this->upSince = microtime(true);
-        $this->lastError = null;
+        $this->transport->open();
+        $this->syncTransport();
         $this->log->info("{$this->name}: synthetic GGA/RMC at 1 Hz from {$this->source}");
     }
 
     public function close(): void
     {
-        $this->state = 'down';
-        $this->upSince = null;
+        $this->transport->close();
+        $this->syncTransport();
+    }
+
+    public function readFds(): array
+    {
+        return $this->transport->readFds();
+    }
+
+    public function writeFds(): array
+    {
+        return $this->transport->writeFds();
+    }
+
+    public function onReadable($fd): void
+    {
+        $this->transport->onReadable($fd);
+        $this->syncTransport();
+    }
+
+    public function onWritable($fd): void
+    {
+        $this->transport->onWritable($fd);
+        $this->syncTransport();
+    }
+
+    public function allowsOut(Sentence $s): bool
+    {
+        return false;
     }
 
     public function observe(Sentence $s): void
@@ -67,6 +102,8 @@ final class SyntheticIface extends Iface
 
     public function tick(float $now): void
     {
+        $this->transport->tick($now);
+        $this->syncTransport();
         if ($this->state !== 'up' || !$this->fresh($this->position, $now)) {
             return;
         }
@@ -76,18 +113,22 @@ final class SyntheticIface extends Iface
             return;
         }
 
-        $this->emit($this->buildGga($utc, $now), $now);
+        $this->emit($this->buildGga($utc, $now));
         if ($clockFresh && $this->clock['date'] !== '') {
-            $this->emit($this->buildRmc($utc, $this->clock['date'], $now), $now);
+            $this->emit($this->buildRmc($utc, $this->clock['date'], $now));
         }
+        $this->syncTransport();
     }
 
     public function statsRow(): array
     {
-        return parent::statsRow() + [
+        $this->syncTransport();
+        return array_merge($this->transport->statsRow(), [
+            'type' => $this->type,
             'source' => $this->source,
             'max_age' => $this->maxAge,
-        ];
+            'protocol' => $this->protocol,
+        ]);
     }
 
     private function observeGns(Sentence $s): void
@@ -244,11 +285,17 @@ final class SyntheticIface extends Iface
         return is_numeric($value) ? $value : '';
     }
 
-    private function emit(Sentence $s, float $now): void
+    private function emit(Sentence $s): void
     {
-        $this->counters['in']++;
-        $this->counters['bytes_in'] += strlen($s->raw);
-        $this->lastActivity = $now;
-        $this->router->dispatch($this, $s);
+        $this->transport->enqueue($s);
+    }
+
+    private function syncTransport(): void
+    {
+        $this->state = $this->transport->state;
+        $this->lastError = $this->transport->lastError;
+        $this->counters = $this->transport->counters;
+        $this->lastActivity = $this->transport->lastActivity;
+        $this->upSince = $this->transport->upSince;
     }
 }

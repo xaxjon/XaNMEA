@@ -380,12 +380,16 @@ function xan_validate_interface(array $raw, array $takenNames = []): array
     if (!in_array($type, XAN_TYPES, true)) {
         $errors[] = 'type must be one of ' . implode(',', XAN_TYPES);
     }
-    $direction = (string)($raw['direction'] ?? ($type === 'tcp_server' ? 'both' : 'in'));
+    $direction = (string)($raw['direction'] ?? match ($type) {
+        'tcp_server' => 'both',
+        'synthetic' => 'out',
+        default => 'in',
+    });
     if (!in_array($direction, XAN_DIRECTIONS, true)) {
         $errors[] = 'direction must be in|out|both';
     }
-    if ($type === 'synthetic' && $direction !== 'in') {
-        $errors[] = 'synthetic direction must be in';
+    if ($type === 'synthetic' && $direction !== 'out') {
+        $errors[] = 'synthetic direction must be out';
     }
     if ($errors) {
         return [null, $errors];
@@ -501,11 +505,22 @@ function xan_validate_interface(array $raw, array $takenNames = []): array
             if (!preg_match('/^[A-Za-z0-9_-]{1,32}$/', $source)) {
                 $errors[] = 'source input interface is required';
             }
+            $protocol = strtolower((string)($raw['protocol'] ?? 'tcp'));
+            if (!in_array($protocol, ['tcp', 'udp'], true)) {
+                $errors[] = 'protocol must be tcp|udp';
+            }
+            $port = (int)($raw['port'] ?? 10110);
+            if ($port < 1 || $port > 65535) {
+                $errors[] = 'invalid port';
+            }
             $maxAge = (int)($raw['max_age'] ?? 5);
             if ($maxAge < 1 || $maxAge > 300) {
                 $errors[] = 'max_age must be 1-300 seconds';
             }
             $def['source'] = $source;
+            $def['protocol'] = $protocol;
+            $def['address'] = trim((string)($raw['address'] ?? ($protocol === 'tcp' ? '0.0.0.0' : '255.255.255.255')));
+            $def['port'] = $port;
             $def['max_age'] = $maxAge;
             break;
     }

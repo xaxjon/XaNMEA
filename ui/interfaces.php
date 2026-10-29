@@ -108,6 +108,15 @@ page_header('Interfaces', 'interfaces');
           <?php endforeach; ?>
         </datalist>
         <div class="hint">Builds GPGGA and GPRMC from GNS/GLL, ZDA, and VTG at 1 Hz.</div>
+        <label class="f" for="f-syn-protocol">Output protocol</label>
+        <select id="f-syn-protocol">
+          <option value="tcp">TCP server</option>
+          <option value="udp">UDP</option>
+        </select>
+        <label class="f" for="f-syn-address">Listen / destination address</label>
+        <input type="text" id="f-syn-address" placeholder="0.0.0.0">
+        <label class="f" for="f-syn-port">Output port</label>
+        <input type="number" id="f-syn-port" min="1" max="65535" value="10110">
         <label class="f" for="f-syn-max-age">Maximum data age (seconds)</label>
         <input type="number" id="f-syn-max-age" min="1" max="300" value="5">
       </div>
@@ -202,7 +211,7 @@ page_header('Interfaces', 'interfaces');
 
   function endpoint(it) {
     if (it.type === 'serial') return (it.device || '?') + ' @ ' + (it.baud || '?');
-    if (it.type === 'synthetic') return 'GGA/RMC @ 1 Hz from ' + (it.source || '?');
+    if (it.type === 'synthetic') return (it.protocol || 'tcp').toUpperCase() + ' ' + (it.address || '') + ':' + (it.port || '') + ' from ' + (it.source || '?');
     return (it.address || '') + ':' + (it.port || '');
   }
 
@@ -381,8 +390,7 @@ page_header('Interfaces', 'interfaces');
       el.style.display = el.getAttribute('data-type') === t ? '' : 'none';
     });
     if (t === 'tcp_server' && $('f-direction').value === 'in') $('f-direction').value = 'both';
-    if (t === 'synthetic') $('f-direction').value = 'in';
-    $('f-direction').disabled = t === 'synthetic';
+    if (t === 'synthetic') $('f-direction').value = 'out';
     udpHint();
   }
 
@@ -415,7 +423,9 @@ page_header('Interfaces', 'interfaces');
     $('f-tc-nodelay').checked = true; $('f-tc-keepalive').checked = true;
     $('f-tc-preamble').value = '';
     $('f-udp-addr').value = ''; $('f-udp-port').value = '10110'; $('f-udp-coalesce').checked = false;
-    $('f-syn-source').value = ''; $('f-syn-max-age').value = '5';
+    $('f-syn-source').value = ''; $('f-syn-protocol').value = 'tcp';
+    $('f-syn-address').value = '0.0.0.0'; $('f-syn-port').value = '10110';
+    $('f-syn-max-age').value = '5';
     $('f-checksum').value = ''; $('f-strict').value = '';
     $('f-srctag').value = 'no'; $('f-timestamp').value = 'no';
     $('f-qsize').value = '0';
@@ -432,7 +442,7 @@ page_header('Interfaces', 'interfaces');
     $('formtitle').textContent = 'Edit interface "' + it.name + '"';
     $('f-name').value = it.name;
     $('f-type').value = it.type;
-    $('f-direction').value = it.direction || (it.type === 'tcp_server' ? 'both' : 'in');
+    $('f-direction').value = it.direction || (it.type === 'tcp_server' ? 'both' : (it.type === 'synthetic' ? 'out' : 'in'));
     $('f-enabled').checked = it.enabled !== false;
     $('f-comment').value = it.comment || '';
     if (it.type === 'serial') {
@@ -455,6 +465,9 @@ page_header('Interfaces', 'interfaces');
       $('f-udp-coalesce').checked = !!it.coalesce;
     } else if (it.type === 'synthetic') {
       $('f-syn-source').value = it.source || '';
+      $('f-syn-protocol').value = it.protocol || 'tcp';
+      $('f-syn-address').value = it.address || '0.0.0.0';
+      $('f-syn-port').value = it.port || 10110;
       $('f-syn-max-age').value = it.max_age || 5;
     }
     $('f-checksum').value = it.checksum === undefined || it.checksum === null ? '' : (it.checksum ? '1' : '0');
@@ -508,6 +521,9 @@ page_header('Interfaces', 'interfaces');
       def.coalesce = $('f-udp-coalesce').checked;
     } else if (t === 'synthetic') {
       def.source = $('f-syn-source').value.trim();
+      def.protocol = $('f-syn-protocol').value;
+      def.address = $('f-syn-address').value.trim();
+      def.port = parseInt($('f-syn-port').value, 10);
       def.max_age = parseInt($('f-syn-max-age').value, 10) || 5;
     }
     return def;

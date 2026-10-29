@@ -30,10 +30,9 @@ input that carries GNS or GLL positions, ZDA date/time, and VTG course/speed.
 The daemon generates GPGGA and GPRMC with valid checksums once per second.
 Generation pauses when the position is older than the configured maximum age.
 
-The synthetic interface is an internal input, so existing outputs and filters
-route it like any other source. For a synthetic-only TCP or UDP stream, add a
-dedicated output with one `pass all` output-filter rule whose source is the
-synthetic interface name.
+The synthetic interface is a direct output: choose a TCP server or UDP, then
+set its listen/destination address and port. It emits only the generated GGA
+and RMC sentences; no separate output interface or output filter is needed.
 
 ## Layout
 

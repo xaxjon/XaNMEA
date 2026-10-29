@@ -55,8 +55,11 @@
       "name": "gps-synthetic",
       "enabled": false,
       "type": "synthetic",
-      "direction": "in",
+      "direction": "out",
       "source": "gps-serial",
+      "protocol": "tcp",
+      "address": "0.0.0.0",
+      "port": 10112,
       "max_age": 5,
       "comment": "GPGGA and GPRMC at 1 Hz from GNS/GLL, ZDA and VTG"
     }
